@@ -1,7 +1,7 @@
 <script setup lang="ts">
 const wizard = useWizardStore()
 
-const stepLabels = ['Select Folder', 'Code Editor', 'AI Tool']
+const stepLabels = ['Project Source', 'Code Editor', 'AI Tool']
 </script>
 
 <template>

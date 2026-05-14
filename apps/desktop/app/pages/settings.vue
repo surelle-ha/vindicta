@@ -52,15 +52,34 @@ function codexHealthDetail(value: string | undefined) {
   return firstLine(text)
 }
 
-async function runCodexCli(args: string[]) {
+function isWindowsRuntime() {
+  return typeof navigator !== 'undefined' && /Windows/i.test(navigator.userAgent)
+}
+
+async function runShellCommand(candidates: string[], args: string[]) {
   const { Command } = await import('@tauri-apps/plugin-shell')
+  let lastError: unknown = null
+  for (const name of candidates) {
+    try {
+      return await Command.create(name, args).execute()
+    }
+    catch (error) {
+      lastError = error
+    }
+  }
+  throw lastError
+}
+
+async function runCodexCli(args: string[]) {
   const commandName = args[0] === '--version' ? 'codex-version' : 'codex-login-status'
-  return Command.create(commandName, args).execute()
+  const windowsCommandName = args[0] === '--version' ? 'codex-cmd-version' : 'codex-cmd-login-status'
+  const candidates = isWindowsRuntime() ? [windowsCommandName, commandName] : [commandName]
+  return runShellCommand(candidates, args)
 }
 
 async function runNpmCli(args: string[]) {
-  const { Command } = await import('@tauri-apps/plugin-shell')
-  return Command.create('npm-version', args).execute()
+  const candidates = isWindowsRuntime() ? ['npm-cmd-version', 'npm-version'] : ['npm-version']
+  return runShellCommand(candidates, args)
 }
 
 async function checkNpmHealth(): Promise<DoctorCheck> {
@@ -142,8 +161,10 @@ async function installCodexCli() {
   codexInstalling.value = true
   codexInstallLog.value = ''
   try {
-    const { Command } = await import('@tauri-apps/plugin-shell')
-    const output = await Command.create('npm-install-codex', ['install', '-g', '@openai/codex@latest']).execute()
+    const output = await runShellCommand(
+      isWindowsRuntime() ? ['npm-cmd-install-codex', 'npm-install-codex'] : ['npm-install-codex'],
+      ['install', '-g', '@openai/codex@latest'],
+    )
 
     codexInstallLog.value = [output.stdout, output.stderr].filter(Boolean).join('\n').trim()
     if (output.code === 0) {

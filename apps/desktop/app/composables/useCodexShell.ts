@@ -21,10 +21,42 @@ function isWindowsPath(path: string) {
   return path.includes('\\') || /^[A-Za-z]:/.test(path)
 }
 
+async function windowsCodexEntrypoint() {
+  const { homeDir } = await import('@tauri-apps/api/path')
+  const home = (await homeDir()).replace(/[\\/]$/, '')
+  return `${home}\\AppData\\Roaming\\npm\\node_modules\\@openai\\codex\\bin\\codex.js`
+}
+
 function estimateTokens(value: string) {
   const trimmed = value.trim()
   if (!trimmed) return 0
   return Math.max(1, Math.ceil(trimmed.length / 4))
+}
+
+export function friendlyCodexExecError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error ?? '')
+
+  if (/usage limit|usage_limit|usage.*exhausted|usage.*remaining|quota|billing|insufficient_quota|rate limit|limit.*reached|429|0 usage|out of credits|insufficient balance|credit/i.test(message)) {
+    return 'Codex could not start because your AI usage limit appears to be exhausted. Check your plan, billing, or usage limits, then try again.'
+  }
+
+  if (/unauthorized|forbidden|authentication|api key|401|403|not logged in/i.test(message)) {
+    return 'Codex is not authenticated. Sign in to Codex or update your API key in Settings, then try again.'
+  }
+
+  if (/codex.*not.*found|not recognized|ENOENT/i.test(message)) {
+    return 'Codex CLI is not available. Open Settings > Doctor and install or repair Codex.'
+  }
+
+  if (/@openai\/codex-win32-x64|Missing optional dependency/i.test(message)) {
+    return 'Codex CLI is installed but its Windows runtime dependency is missing. Open Settings > Doctor and use Install/Repair Codex, or run npm install -g @openai/codex@latest.'
+  }
+
+  if (/sep is not defined/i.test(message)) {
+    return 'Vindicta could not prepare the Codex run because of a local path handling error. Please update Vindicta and try again.'
+  }
+
+  return message || 'Codex could not run. Check Settings > Doctor, then try again.'
 }
 
 export async function runCodexExec(opts: CodexExecOptions): Promise<CodexExecResult> {
@@ -32,6 +64,7 @@ export async function runCodexExec(opts: CodexExecOptions): Promise<CodexExecRes
   const fs = useTauriFs()
   const isWin = isWindowsPath(opts.projectPath)
   const basePath = isWin ? opts.projectPath.replace(/\//g, '\\') : opts.projectPath
+  const sep = isWin ? '\\' : '/'
   const stamp = Date.now()
   const outputFile = `${basePath}${sep}.vindicta_codex_output_${stamp}.txt`
   const sandbox = opts.sandbox ?? 'read-only'
@@ -39,7 +72,7 @@ export async function runCodexExec(opts: CodexExecOptions): Promise<CodexExecRes
   try {
     const reasoningEffort = opts.reasoningEffort ?? 'medium'
     const effortArgs = ['-c', `model_reasoning_effort="${reasoningEffort}"`]
-    const args = [
+    const codexArgs = [
       'exec',
       ...effortArgs,
       '-C',
@@ -54,7 +87,23 @@ export async function runCodexExec(opts: CodexExecOptions): Promise<CodexExecRes
       opts.prompt,
     ]
 
-    const output = await Command.create('codex-exec', args, { cwd: basePath }).execute()
+    const commandName = isWin ? 'node-codex-exec' : 'codex-exec'
+    const commandArgs = isWin ? [await windowsCodexEntrypoint(), ...codexArgs] : codexArgs
+    const output = await Command.create(commandName, commandArgs, { cwd: basePath }).execute()
+    const commandText = [output.stderr, output.stdout].filter(Boolean).join('\n')
+    if (output.code !== 0 && commandText) {
+      const friendlyError = friendlyCodexExecError(commandText)
+      return {
+        code: output.code,
+        stdout: output.stdout,
+        stderr: friendlyError,
+        tokenUsage: {
+          inputTokens: estimateTokens(opts.prompt),
+          outputTokens: estimateTokens(commandText),
+          totalTokens: estimateTokens(opts.prompt) + estimateTokens(commandText),
+        },
+      }
+    }
 
     const finalMessage = await fs.readTextFile(outputFile).catch(() => '')
     const responseText = finalMessage || output.stdout || output.stderr
@@ -80,6 +129,9 @@ export async function runCodexExec(opts: CodexExecOptions): Promise<CodexExecRes
       stderr: output.stderr,
       tokenUsage,
     }
+  }
+  catch (error) {
+    throw new Error(friendlyCodexExecError(error))
   }
   finally {
     fs.removeFile(outputFile).catch(() => {})

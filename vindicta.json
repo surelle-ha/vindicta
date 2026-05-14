@@ -1,5 +1,5 @@
 {
-  "$schema": "https://vindicta.dev/schema/v7.json",
+  "$schema": "https://raw.githubusercontent.com/surelle-ha/vindicta/main/schema/v7.json",
   "version": 7,
   "meta": {
     "name": "vindicta",
@@ -17,7 +17,7 @@
     "id": "uDFkpE2XMI4Jzi7A4zGmp",
     "ticketCounter": 6,
     "createdAt": "2026-05-14T07:10:35.045Z",
-    "updatedAt": "2026-05-14T11:44:39.401Z"
+    "updatedAt": "2026-05-14T15:37:32.987Z"
   },
   "settings": {
     "roles": [
@@ -106,11 +106,11 @@
         "severity:critical"
       ],
       "roleIds": [],
-      "sprintId": "WbfH7KAsm0VVTeA74yQLl",
+      "sprintId": null,
       "comments": [],
       "likes": 0,
       "createdAt": "2026-05-14T10:08:24.220Z",
-      "updatedAt": "2026-05-14T11:42:29.920Z",
+      "updatedAt": "2026-05-14T15:37:32.942Z",
       "resolvedAt": null,
       "createdBy": "AI Agent"
     },
@@ -133,11 +133,11 @@
         "severity:critical"
       ],
       "roleIds": [],
-      "sprintId": "WbfH7KAsm0VVTeA74yQLl",
+      "sprintId": null,
       "comments": [],
       "likes": 0,
       "createdAt": "2026-05-14T10:08:24.233Z",
-      "updatedAt": "2026-05-14T11:42:29.997Z",
+      "updatedAt": "2026-05-14T15:37:32.967Z",
       "resolvedAt": null,
       "createdBy": "AI Agent"
     },
@@ -187,11 +187,11 @@
         "severity:high"
       ],
       "roleIds": [],
-      "sprintId": "WbfH7KAsm0VVTeA74yQLl",
+      "sprintId": null,
       "comments": [],
       "likes": 0,
       "createdAt": "2026-05-14T10:08:24.257Z",
-      "updatedAt": "2026-05-14T11:42:29.947Z",
+      "updatedAt": "2026-05-14T15:37:32.953Z",
       "resolvedAt": null,
       "createdBy": "AI Agent"
     },
@@ -257,12 +257,8 @@
       "goal": "",
       "startDate": "2026-05-14T11:40:00.000Z",
       "endDate": "2026-05-28T11:40:00.000Z",
-      "ticketIds": [
-        "0MWII2xQpAIOIrpb57iku",
-        "af8f0VexNeCWz-bpS7xB8",
-        "Godf2d93mzP9SmA6eYFB8"
-      ],
-      "status": "active",
+      "ticketIds": [],
+      "status": "completed",
       "createdAt": "2026-05-14T11:42:11.850Z"
     }
   ],

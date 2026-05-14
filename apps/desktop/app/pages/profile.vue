@@ -31,7 +31,25 @@ const lastTokenUse = computed(() => {
   if (!tokenUsage.value.lastUsedAt) return 'No AI usage recorded yet'
   return new Date(tokenUsage.value.lastUsedAt).toLocaleString()
 })
-const promptHistory = computed(() => tokenUsage.value.history.slice(0, 8))
+const promptPageSize = 6
+const promptPage = ref(1)
+const promptPageCount = computed(() => Math.max(1, Math.ceil(tokenUsage.value.history.length / promptPageSize)))
+const promptHistory = computed(() => {
+  const start = (promptPage.value - 1) * promptPageSize
+  return tokenUsage.value.history.slice(start, start + promptPageSize)
+})
+
+watch(() => tokenUsage.value.history.length, () => {
+  if (promptPage.value > promptPageCount.value) promptPage.value = promptPageCount.value
+})
+
+function previousPromptPage() {
+  promptPage.value = Math.max(1, promptPage.value - 1)
+}
+
+function nextPromptPage() {
+  promptPage.value = Math.min(promptPageCount.value, promptPage.value + 1)
+}
 
 function promptTitle(prompt: string) {
   const firstLine = prompt.split('\n').map(line => line.trim()).find(Boolean)
@@ -180,11 +198,24 @@ function openPrompt(item: PromptRunHistory) {
         </div>
 
         <div class="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-4 space-y-3">
-          <div class="flex items-center gap-2">
-            <Clock3 class="size-3.5 text-violet-300" />
-            <div>
-              <p class="text-sm font-semibold text-[var(--text)]">Prompt History</p>
-              <p class="text-xs text-[var(--text-muted)] mt-0.5">Recent prompts run through configured AI tools.</p>
+          <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div class="flex items-center gap-2">
+              <Clock3 class="size-3.5 text-violet-300" />
+              <div>
+                <p class="text-sm font-semibold text-[var(--text)]">Prompt History</p>
+                <p class="text-xs text-[var(--text-muted)] mt-0.5">Recent prompts run through configured AI tools.</p>
+              </div>
+            </div>
+            <div v-if="tokenUsage.history.length > promptPageSize" class="flex items-center gap-2">
+              <span class="text-[10px] text-[var(--text-faint)]">
+                Page {{ promptPage }} of {{ promptPageCount }}
+              </span>
+              <GlassButton variant="ghost" size="sm" :disabled="promptPage === 1" @click="previousPromptPage">
+                Previous
+              </GlassButton>
+              <GlassButton variant="ghost" size="sm" :disabled="promptPage === promptPageCount" @click="nextPromptPage">
+                Next
+              </GlassButton>
             </div>
           </div>
 

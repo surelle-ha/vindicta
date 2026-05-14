@@ -12,7 +12,7 @@ export const useWizardStore = defineStore('wizard', {
     projectCode: '',
     selectedEditor: null as EditorSlug | null,
     selectedAITools: ['codex'] as AIToolSlug[],
-    importMode: 'local' as 'local' | 'clone',
+    importMode: 'local' as 'local' | 'clone' | 'new',
     gitUrl: '',
     cloning: false,
     cloneError: '',

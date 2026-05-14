@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { CheckCircle2, CircleDashed, FolderKanban, Stethoscope, UserCircle2, Zap } from 'lucide-vue-next'
+import vindictaBanner from '~/assets/images/vindicta-banner.png'
 
 const app = useAppStore()
 const user = useUserStore()
@@ -82,23 +83,26 @@ function onKey(e: KeyboardEvent) {
           <div class="relative flex flex-col items-center gap-8">
             <!-- Logo mark -->
             <div class="flex flex-col items-center gap-4">
-              <div
-                class="size-16 rounded-2xl bg-indigo-600/90 flex items-center justify-center shadow-lg shadow-indigo-900/50 ring-1 ring-indigo-500/30">
-                <Zap class="size-8 text-white" :stroke-width="2.5" />
-              </div>
               <div class="text-center">
-                <h1 class="text-3xl font-bold tracking-tight text-white/90">Vindicta</h1>
-                <p class="text-sm text-white/30 mt-1.5 tracking-wide">Your vibe coding companion</p>
-                <TextType :text="launchMessages" class-name="mt-3 min-h-5 text-sm font-medium text-indigo-100/55"
-                  :typing-speed="42" :deleting-speed="22" :pause-duration="1800" :show-cursor="true" cursor-character="|"
-                  cursor-class-name="text-indigo-200/50" />
+                <img
+                  :src="vindictaBanner"
+                  alt="Vindicta"
+                  class="mx-auto h-auto w-[min(19rem,72vw)] select-none object-contain drop-shadow-2xl"
+                  draggable="false"
+                >
+                <div class="-mt-12 sm:-mt-14">
+                  <p class="text-sm text-white/30 tracking-wide">Your vibe coding companion</p>
+                  <TextType :text="launchMessages" class-name="mt-3 min-h-5 text-sm font-medium text-indigo-100/55"
+                    :typing-speed="42" :deleting-speed="22" :pause-duration="1800" :show-cursor="true" cursor-character="|"
+                    cursor-class-name="text-indigo-200/50" />
+                </div>
               </div>
             </div>
 
             <!-- Enter button -->
             <div class="flex flex-col items-center gap-4">
               <button
-                class="pointer-events-auto rounded-lg border border-indigo-300/35 bg-white/[0.03] px-8 py-2.5 text-sm font-semibold text-indigo-100 shadow-lg shadow-indigo-950/30 transition-colors hover:border-indigo-200/60 hover:bg-indigo-500/10 hover:text-white"
+                class="pointer-events-auto cursor-pointer rounded-lg border border-indigo-300/35 bg-white/[0.03] px-8 py-2.5 text-sm font-semibold text-indigo-100 shadow-lg shadow-indigo-950/30 transition-colors hover:border-indigo-200/60 hover:bg-indigo-500/10 hover:text-white"
                 @click="enter">
                 Enter Vindicta
               </button>
