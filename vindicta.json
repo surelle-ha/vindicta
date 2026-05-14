@@ -1,0 +1,280 @@
+{
+  "$schema": "https://vindicta.dev/schema/v7.json",
+  "version": 7,
+  "meta": {
+    "name": "vindicta",
+    "description": "",
+    "absolutePath": "D:\\Workspace\\vindicta",
+    "githubRepo": null,
+    "editor": "vscode",
+    "aiTool": "codex",
+    "aiTools": [
+      "codex"
+    ],
+    "activeAITool": "codex",
+    "ownedBy": "local",
+    "code": "VIN",
+    "id": "uDFkpE2XMI4Jzi7A4zGmp",
+    "ticketCounter": 6,
+    "createdAt": "2026-05-14T07:10:35.045Z",
+    "updatedAt": "2026-05-14T11:44:39.401Z"
+  },
+  "settings": {
+    "roles": [
+      {
+        "id": "role_dev",
+        "name": "Developer",
+        "color": "#6366f1"
+      },
+      {
+        "id": "role_qa",
+        "name": "QA",
+        "color": "#10b981"
+      },
+      {
+        "id": "role_lead",
+        "name": "Tech Lead",
+        "color": "#f59e0b"
+      }
+    ],
+    "kanbanColumns": [
+      {
+        "id": "col_backlog",
+        "displayName": "Backlog",
+        "status": "backlog",
+        "order": 0,
+        "visible": true
+      },
+      {
+        "id": "col_todo",
+        "displayName": "To Do",
+        "status": "todo",
+        "order": 1,
+        "visible": true
+      },
+      {
+        "id": "col_inprogress",
+        "displayName": "In Progress",
+        "status": "in_progress",
+        "order": 2,
+        "visible": true
+      },
+      {
+        "id": "col_inreview",
+        "displayName": "In Review",
+        "status": "in_review",
+        "order": 3,
+        "visible": true
+      },
+      {
+        "id": "col_done",
+        "displayName": "Done",
+        "status": "done",
+        "order": 4,
+        "visible": true
+      }
+    ]
+  },
+  "members": [
+    {
+      "id": "member_claude",
+      "name": "Claude",
+      "email": null,
+      "avatarUrl": null,
+      "isAI": true,
+      "roleIds": [],
+      "joinedAt": "2026-05-14T07:10:35.045Z"
+    }
+  ],
+  "tickets": [
+    {
+      "id": "0MWII2xQpAIOIrpb57iku",
+      "number": 1,
+      "type": "fix",
+      "status": "backlog",
+      "priority": "critical",
+      "title": "[Security] Unsanitized Markdown can become Tauri RCE",
+      "description": "## Security finding\n**Severity:** critical\n**Area:** apps/desktop/app/components/project Markdown rendering\n**Risk family:** A03:2021 Injection / Cross-Site Scripting\n## Detail\nProject-controlled README content, ticket descriptions, and sprint plans are rendered with marked and inserted with v-html without sanitization. Marked permits raw HTML by default, so a malicious repository README or imported vindicta.json ticket can include event-handler HTML such as an image onerror payload. Because the Tauri app also has CSP disabled, global Tauri enabled, and broad shell/filesystem permissions, this XSS can escalate to local command execution or file access.\n## Evidence\napps/desktop/app/components/project/ProjectInfo.vue imports marked at lines 3-5, reads README.md at line 32, renders v-html at line 78. TicketModal.vue renders marked descriptionHtml with v-html at lines 54 and 191. TicketDetail.vue renders descriptionHtml with v-html at lines 23 and 343. VibeSprint.vue renders marked planHtml with v-html at lines 36, 753, and 874. apps/desktop/tauri/tauri.conf.json sets withGlobalTauri true at line 13 and csp null at line 28.\n## Recommendation\nSanitize all Markdown output before v-html using a strict sanitizer such as DOMPurify configured for Tauri, or disable raw HTML in the Markdown renderer. Prefer Vue text bindings where rich HTML is not required. Set a restrictive Tauri CSP, disable withGlobalTauri, and reduce shell/filesystem capabilities so a rendering bug cannot become OS-level execution.\n_Generated from the Security Analyzer AI scan._",
+      "gitControl": {
+        "enabled": false,
+        "branch": "",
+        "autoCommit": false,
+        "autoPush": false
+      },
+      "labels": [
+        "security",
+        "severity:critical"
+      ],
+      "roleIds": [],
+      "sprintId": "WbfH7KAsm0VVTeA74yQLl",
+      "comments": [],
+      "likes": 0,
+      "createdAt": "2026-05-14T10:08:24.220Z",
+      "updatedAt": "2026-05-14T11:42:29.920Z",
+      "resolvedAt": null,
+      "createdBy": "AI Agent"
+    },
+    {
+      "id": "Godf2d93mzP9SmA6eYFB8",
+      "number": 2,
+      "type": "fix",
+      "status": "backlog",
+      "priority": "critical",
+      "title": "[Security] Tauri shell capability allows arbitrary OS commands",
+      "description": "## Security finding\n**Severity:** critical\n**Area:** apps/desktop/tauri/capabilities/default.json\n**Risk family:** A05:2021 Security Misconfiguration\n## Detail\nThe default Tauri capability permits execute and spawn for cmd, sh, powershell, git, claude, and codex with args set to true. Any script running in the main webview can invoke these capabilities with attacker-chosen arguments. Combined with any XSS, compromised dependency, or unintended webview content execution, this grants arbitrary command execution as the desktop user.\n## Evidence\napps/desktop/tauri/capabilities/default.json enables shell:allow-execute at line 10 and shell:allow-spawn at line 21. Lines 12-17 and 23-28 allow claude, codex, cmd, sh, powershell, and git with args true. apps/desktop/tauri/tauri.conf.json enables withGlobalTauri at line 13.\n## Recommendation\nRemove cmd, sh, and powershell from the webview capability. Replace args true with exact argument allowlists or validated argument patterns. Move command orchestration into Rust commands that validate inputs server-side of the webview boundary, and expose only narrow, task-specific APIs.\n_Generated from the Security Analyzer AI scan._",
+      "gitControl": {
+        "enabled": false,
+        "branch": "",
+        "autoCommit": false,
+        "autoPush": false
+      },
+      "labels": [
+        "security",
+        "severity:critical"
+      ],
+      "roleIds": [],
+      "sprintId": "WbfH7KAsm0VVTeA74yQLl",
+      "comments": [],
+      "likes": 0,
+      "createdAt": "2026-05-14T10:08:24.233Z",
+      "updatedAt": "2026-05-14T11:42:29.997Z",
+      "resolvedAt": null,
+      "createdBy": "AI Agent"
+    },
+    {
+      "id": "PzBaPhzTJc6hVb1tN46vX",
+      "number": 3,
+      "type": "fix",
+      "status": "backlog",
+      "priority": "high",
+      "title": "[Security] Tauri filesystem scope grants broad read/write/delete access",
+      "description": "## Security finding\n**Severity:** high\n**Area:** apps/desktop/tauri/capabilities/default.json\n**Risk family:** A01:2021 Broken Access Control\n## Detail\nThe webview is allowed to read text files, write text files, remove files, create directories, and read directories across **, $HOME/**, and Windows drive roots. A webview compromise can therefore read sensitive local files, overwrite project files, or delete arbitrary files reachable by the user account.\n## Evidence\napps/desktop/tauri/capabilities/default.json grants fs:allow-read-text-file at line 34, fs:allow-write-text-file at line 35, fs:allow-read-dir at line 37, fs:allow-remove at line 38, fs:allow-mkdir at line 39, and fs:scope for **, $HOME/**, and ?:/** at lines 41-45.\n## Recommendation\nScope filesystem access to app data and explicitly selected project directories only. Avoid global remove permission; broker deletes through a Rust command that checks paths are inside the active project and blocks symlink/path traversal escapes. Store selected project roots in trusted state and validate every path against those roots.\n_Generated from the Security Analyzer AI scan._",
+      "gitControl": {
+        "enabled": false,
+        "branch": "",
+        "autoCommit": false,
+        "autoPush": false
+      },
+      "labels": [
+        "security",
+        "severity:high"
+      ],
+      "roleIds": [],
+      "sprintId": null,
+      "comments": [],
+      "likes": 0,
+      "createdAt": "2026-05-14T10:08:24.245Z",
+      "updatedAt": "2026-05-14T10:08:24.245Z",
+      "resolvedAt": null,
+      "createdBy": "AI Agent"
+    },
+    {
+      "id": "af8f0VexNeCWz-bpS7xB8",
+      "number": 4,
+      "type": "fix",
+      "status": "backlog",
+      "priority": "high",
+      "title": "[Security] Git clone command injection on Unix-like systems",
+      "description": "## Security finding\n**Severity:** high\n**Area:** apps/desktop/app/components/wizard/StepDirectory.vue\n**Risk family:** A03:2021 Injection / Command Injection\n## Detail\nThe clone workflow builds a sh -c command using the user-controlled Git URL and derived destination path inside double quotes without shell escaping. On Unix-like systems, a repository URL containing a double quote and shell metacharacters can break out of the quoted argument and execute arbitrary commands when the user clicks Clone Repository.\n## Evidence\napps/desktop/app/components/wizard/StepDirectory.vue imports Command at line 3, accepts wizard.gitUrl from the repository URL field, and on non-Windows creates Command.create('sh', ['-c', `mkdir -p \"${vindictaDir}\" && git clone \"${wizard.gitUrl}\" \"${fullDestPath}\"`]) at lines 69-72.\n## Recommendation\nDo not use sh -c for git clone. Invoke git directly with argument arrays, for example Command.create('git', ['clone', validatedUrl, fullDestPath]). Validate allowed Git URL schemes and reject control characters, quotes, and shell metacharacters. Also escape or normalize derived destination names.\n_Generated from the Security Analyzer AI scan._",
+      "gitControl": {
+        "enabled": false,
+        "branch": "",
+        "autoCommit": false,
+        "autoPush": false
+      },
+      "labels": [
+        "security",
+        "severity:high"
+      ],
+      "roleIds": [],
+      "sprintId": "WbfH7KAsm0VVTeA74yQLl",
+      "comments": [],
+      "likes": 0,
+      "createdAt": "2026-05-14T10:08:24.257Z",
+      "updatedAt": "2026-05-14T11:42:29.947Z",
+      "resolvedAt": null,
+      "createdBy": "AI Agent"
+    },
+    {
+      "id": "Rdc7t5ej8BwHtvMSGbbsz",
+      "number": 5,
+      "type": "fix",
+      "status": "backlog",
+      "priority": "medium",
+      "title": "[Security] Claude shell wrapper is injectable through project paths",
+      "description": "## Security finding\n**Severity:** medium\n**Area:** apps/desktop/app/composables/useClaudeShell.ts\n**Risk family:** A03:2021 Injection / Command Injection\n## Detail\nThe non-Windows Claude runner constructs a sh -c command and interpolates the temporary prompt file path inside double quotes without escaping. A selected project path containing a double quote and shell metacharacters can break out of the redirection path and run commands when Claude is launched for that project.\n## Evidence\napps/desktop/app/composables/useClaudeShell.ts derives tmpFile from projectPath at line 39, writes the prompt to that path at line 42, then creates cmdArgs = ['-c', `PATH=\"...\" claude --output-format stream-json < \"${tmpFile}\"`] at line 68 and executes it with cwd projectPath at line 75.\n## Recommendation\nAvoid sh -c and invoke claude directly with a safe stdin mechanism where possible. If a shell is unavoidable, quote paths with a robust single-quote escaping helper and reject project paths containing control characters. Reuse the safer shQuote pattern already present in useCodexShell.ts.\n_Generated from the Security Analyzer AI scan._",
+      "gitControl": {
+        "enabled": false,
+        "branch": "",
+        "autoCommit": false,
+        "autoPush": false
+      },
+      "labels": [
+        "security",
+        "severity:medium"
+      ],
+      "roleIds": [],
+      "sprintId": null,
+      "comments": [],
+      "likes": 0,
+      "createdAt": "2026-05-14T10:08:24.269Z",
+      "updatedAt": "2026-05-14T10:08:24.269Z",
+      "resolvedAt": null,
+      "createdBy": "AI Agent"
+    },
+    {
+      "id": "t-DUra5FzZPFPNZYJJvTV",
+      "number": 6,
+      "type": "fix",
+      "status": "backlog",
+      "priority": "high",
+      "title": "[Security] Tenant selection trusts client-controlled headers",
+      "description": "## Security finding\n**Severity:** high\n**Area:** apps/api/src/common/middleware/tenant.middleware.ts\n**Risk family:** A01:2021 Broken Access Control\n## Detail\nThe API middleware sets request.tenantId from the x-tenant-id header when present, otherwise from the Host subdomain. A client can choose another tenant by sending x-tenant-id or a forged Host header. Any route that relies on CurrentTenant for filtering or writes would be vulnerable to cross-tenant data access or modification.\n## Evidence\napps/api/src/common/middleware/tenant.middleware.ts reads host at line 7, derives subdomain at line 9, reads x-tenant-id at line 10, and assigns request.tenantId from tenantHeader first at line 11. apps/api/src/common/decorators/tenant.decorator.ts returns request.tenantId.\n## Recommendation\nDo not trust tenant identity from arbitrary request headers. Resolve tenants from authenticated JWT claims, a server-owned session, or a verified canonical host after proxy normalization. Enforce membership checks on every tenant-scoped operation and include tenantId predicates in repository queries.\n_Generated from the Security Analyzer AI scan._",
+      "gitControl": {
+        "enabled": false,
+        "branch": "",
+        "autoCommit": false,
+        "autoPush": false
+      },
+      "labels": [
+        "security",
+        "severity:high"
+      ],
+      "roleIds": [],
+      "sprintId": null,
+      "comments": [],
+      "likes": 0,
+      "createdAt": "2026-05-14T10:08:24.283Z",
+      "updatedAt": "2026-05-14T11:44:39.392Z",
+      "resolvedAt": null,
+      "createdBy": "AI Agent"
+    }
+  ],
+  "sprints": [
+    {
+      "id": "WbfH7KAsm0VVTeA74yQLl",
+      "name": "Sprint 3",
+      "goal": "",
+      "startDate": "2026-05-14T11:40:00.000Z",
+      "endDate": "2026-05-28T11:40:00.000Z",
+      "ticketIds": [
+        "0MWII2xQpAIOIrpb57iku",
+        "af8f0VexNeCWz-bpS7xB8",
+        "Godf2d93mzP9SmA6eYFB8"
+      ],
+      "status": "active",
+      "createdAt": "2026-05-14T11:42:11.850Z"
+    }
+  ],
+  "history": [
+    {
+      "id": "aonp8z7FbPr6feafziqxO",
+      "at": "2026-05-14T07:10:35.045Z",
+      "actor": "local",
+      "action": "project:created",
+      "payload": {
+        "name": "vindicta"
+      }
+    }
+  ]
+}

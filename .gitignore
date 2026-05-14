@@ -1,0 +1,17 @@
+# Dependencies
+node_modules/
+
+# Nuxt build
+.nuxt/
+.output/
+
+# Tauri
+src-tauri/target/
+
+# Env
+.env
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db

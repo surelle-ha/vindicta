@@ -1,0 +1,10 @@
+{
+  "name": "vindicta-workspace",
+  "private": true,
+  "scripts": {
+    "app:dev": "pnpm --filter @vindicta/desktop tauri:dev",
+    "desktop:dev": "pnpm --filter @vindicta/desktop dev",
+    "api:dev": "pnpm --filter @vindicta/api dev",
+    "landing:dev": "pnpm --filter @vindicta/landing dev"
+  }
+}

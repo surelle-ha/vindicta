@@ -1,0 +1,71 @@
+You are Codex working inside Vindicta. The user is handing over an entire sprint to you.
+
+Project: vindicta
+Sprint: Sprint 3
+Sprint goal: (no goal provided)
+Sprint status: active
+Sprint window: 2026-05-14T11:40:00.000Z to 2026-05-28T11:40:00.000Z
+
+Effort level: Deep (high)
+Effort guidance: More thorough pass across tickets, code paths, tests, and integration risks.
+
+Tickets:
+[
+  {
+    "key": "VIN-1",
+    "id": "0MWII2xQpAIOIrpb57iku",
+    "title": "[Security] Unsanitized Markdown can become Tauri RCE",
+    "type": "fix",
+    "status": "backlog",
+    "priority": "critical",
+    "labels": [
+      "security",
+      "severity:critical"
+    ],
+    "description": "## Security finding\n**Severity:** critical\n**Area:** apps/desktop/app/components/project Markdown rendering\n**Risk family:** A03:2021 Injection / Cross-Site Scripting\n## Detail\nProject-controlled README content, ticket descriptions, and sprint plans are rendered with marked and inserted with v-html without sanitization. Marked permits raw HTML by default, so a malicious repository README or imported vindicta.json ticket can include event-handler HTML such as an image onerror payload. Because the Tauri app also has CSP disabled, global Tauri enabled, and broad shell/filesystem permissions, this XSS can escalate to local command execution or file access.\n## Evidence\napps/desktop/app/components/project/ProjectInfo.vue imports marked at lines 3-5, reads README.md at line 32, renders v-html at line 78. TicketModal.vue renders marked descriptionHtml with v-html at lines 54 and 191. TicketDetail.vue renders descriptionHtml with v-html at lines 23 and 343. VibeSprint.vue renders marked planHtml with v-html at lines 36, 753, and 874. apps/desktop/tauri/tauri.conf.json sets withGlobalTauri true at line 13 and csp null at line 28.\n## Recommendation\nSanitize all Markdown output before v-html using a strict sanitizer such as DOMPurify configured for Tauri, or disable raw HTML in the Markdown renderer. Prefer Vue text bindings where rich HTML is not required. Set a restrictive Tauri CSP, disable withGlobalTauri, and reduce shell/filesystem capabilities so a rendering bug cannot become OS-level execution.\n_Generated from the Security Analyzer AI scan._"
+  },
+  {
+    "key": "VIN-4",
+    "id": "af8f0VexNeCWz-bpS7xB8",
+    "title": "[Security] Git clone command injection on Unix-like systems",
+    "type": "fix",
+    "status": "backlog",
+    "priority": "high",
+    "labels": [
+      "security",
+      "severity:high"
+    ],
+    "description": "## Security finding\n**Severity:** high\n**Area:** apps/desktop/app/components/wizard/StepDirectory.vue\n**Risk family:** A03:2021 Injection / Command Injection\n## Detail\nThe clone workflow builds a sh -c command using the user-controlled Git URL and derived destination path inside double quotes without shell escaping. On Unix-like systems, a repository URL containing a double quote and shell metacharacters can break out of the quoted argument and execute arbitrary commands when the user clicks Clone Repository.\n## Evidence\napps/desktop/app/components/wizard/StepDirectory.vue imports Command at line 3, accepts wizard.gitUrl from the repository URL field, and on non-Windows creates Command.create('sh', ['-c', `mkdir -p \"${vindictaDir}\" && git clone \"${wizard.gitUrl}\" \"${fullDestPath}\"`]) at lines 69-72.\n## Recommendation\nDo not use sh -c for git clone. Invoke git directly with argument arrays, for example Command.create('git', ['clone', validatedUrl, fullDestPath]). Validate allowed Git URL schemes and reject control characters, quotes, and shell metacharacters. Also escape or normalize derived destination names.\n_Generated from the Security Analyzer AI scan._"
+  },
+  {
+    "key": "VIN-2",
+    "id": "Godf2d93mzP9SmA6eYFB8",
+    "title": "[Security] Tauri shell capability allows arbitrary OS commands",
+    "type": "fix",
+    "status": "backlog",
+    "priority": "critical",
+    "labels": [
+      "security",
+      "severity:critical"
+    ],
+    "description": "## Security finding\n**Severity:** critical\n**Area:** apps/desktop/tauri/capabilities/default.json\n**Risk family:** A05:2021 Security Misconfiguration\n## Detail\nThe default Tauri capability permits execute and spawn for cmd, sh, powershell, git, claude, and codex with args set to true. Any script running in the main webview can invoke these capabilities with attacker-chosen arguments. Combined with any XSS, compromised dependency, or unintended webview content execution, this grants arbitrary command execution as the desktop user.\n## Evidence\napps/desktop/tauri/capabilities/default.json enables shell:allow-execute at line 10 and shell:allow-spawn at line 21. Lines 12-17 and 23-28 allow claude, codex, cmd, sh, powershell, and git with args true. apps/desktop/tauri/tauri.conf.json enables withGlobalTauri at line 13.\n## Recommendation\nRemove cmd, sh, and powershell from the webview capability. Replace args true with exact argument allowlists or validated argument patterns. Move command orchestration into Rust commands that validate inputs server-side of the webview boundary, and expose only narrow, task-specific APIs.\n_Generated from the Security Analyzer AI scan._"
+  }
+]
+
+Instructions:
+- Work through the sprint tickets where practical.
+- Inspect the codebase before changing files.
+- Keep edits focused on the sprint scope and avoid unrelated refactors.
+- Do not commit, push, install new dependencies, or run destructive commands.
+- If a ticket is too large or unclear, make the safest useful progress and document the blocker.
+- Run relevant lightweight checks when available.
+
+Return a concise markdown handover report with these sections:
+## Summary
+## Tickets Worked
+## Changed Files
+## Checks Run
+## Blockers
+## Follow-ups
+
+Report observable actions and output only. Do not include private chain-of-thought.
