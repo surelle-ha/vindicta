@@ -1,0 +1,302 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/surelle-ha/vindicta/main/schema/v7.json",
+  "title": "Vindicta Project",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "$schema",
+    "version",
+    "meta",
+    "settings",
+    "members",
+    "tickets",
+    "sprints",
+    "history"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "version": {
+      "const": 7
+    },
+    "meta": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "id",
+        "name",
+        "absolutePath",
+        "editor",
+        "aiTool",
+        "aiTools",
+        "activeAITool",
+        "ownedBy",
+        "code",
+        "ticketCounter",
+        "createdAt",
+        "updatedAt"
+      ],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "absolutePath": { "type": "string" },
+        "githubRepo": { "type": ["string", "null"] },
+        "editor": { "type": "string" },
+        "aiTool": { "type": "string" },
+        "aiTools": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "activeAITool": { "type": ["string", "null"] },
+        "ownedBy": { "type": "string" },
+        "code": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 3
+        },
+        "ticketCounter": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "settings": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["roles", "kanbanColumns"],
+      "properties": {
+        "roles": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/role" }
+        },
+        "kanbanColumns": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/kanbanColumn" }
+        }
+      }
+    },
+    "members": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/member" }
+    },
+    "tickets": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/ticket" }
+    },
+    "sprints": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/sprint" }
+    },
+    "history": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/historyEntry" }
+    }
+  },
+  "$defs": {
+    "role": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["id", "name", "color"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "color": { "type": "string" }
+      }
+    },
+    "kanbanColumn": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["id", "displayName", "status", "order", "visible"],
+      "properties": {
+        "id": { "type": "string" },
+        "displayName": { "type": "string" },
+        "status": { "$ref": "#/$defs/ticketStatus" },
+        "order": { "type": "integer" },
+        "visible": { "type": "boolean" }
+      }
+    },
+    "member": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["id", "name", "email", "avatarUrl", "isAI", "roleIds", "joinedAt"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": ["string", "null"] },
+        "avatarUrl": { "type": ["string", "null"] },
+        "isAI": { "type": "boolean" },
+        "roleIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "joinedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "ticket": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "id",
+        "number",
+        "type",
+        "status",
+        "priority",
+        "title",
+        "description",
+        "gitControl",
+        "labels",
+        "roleIds",
+        "sprintId",
+        "comments",
+        "likes",
+        "createdAt",
+        "updatedAt",
+        "resolvedAt",
+        "createdBy"
+      ],
+      "properties": {
+        "id": { "type": "string" },
+        "number": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "type": { "$ref": "#/$defs/ticketType" },
+        "status": { "$ref": "#/$defs/ticketStatus" },
+        "priority": { "$ref": "#/$defs/ticketPriority" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "gitControl": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": ["enabled", "branch", "autoCommit", "autoPush"],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "branch": { "type": "string" },
+            "autoCommit": { "type": "boolean" },
+            "autoPush": { "type": "boolean" }
+          }
+        },
+        "labels": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "roleIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "sprintId": { "type": ["string", "null"] },
+        "comments": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/comment" }
+        },
+        "likes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "resolvedAt": {
+          "type": ["string", "null"],
+          "format": "date-time"
+        },
+        "createdBy": { "type": "string" }
+      }
+    },
+    "comment": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["id", "text", "author", "isAI", "parentId", "likes", "createdAt"],
+      "properties": {
+        "id": { "type": "string" },
+        "text": { "type": "string" },
+        "author": { "type": "string" },
+        "isAI": { "type": "boolean" },
+        "parentId": { "type": ["string", "null"] },
+        "likes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "sprint": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["id", "name", "goal", "startDate", "endDate", "ticketIds", "status", "createdAt"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "goal": { "type": "string" },
+        "startDate": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "endDate": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "ticketIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "status": {
+          "enum": ["planned", "active", "completed"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "historyEntry": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["id", "at", "actor", "action", "payload"],
+      "properties": {
+        "id": { "type": "string" },
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "actor": { "type": "string" },
+        "action": { "type": "string" },
+        "payload": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "ticketStatus": {
+      "enum": ["backlog", "todo", "in_progress", "in_review", "done", "cancelled"]
+    },
+    "ticketType": {
+      "enum": ["feature", "bug", "fix", "chore", "spike"]
+    },
+    "ticketPriority": {
+      "enum": ["low", "medium", "high", "critical"]
+    }
+  }
+}

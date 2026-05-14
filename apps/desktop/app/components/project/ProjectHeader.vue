@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { GitBranch, Cpu, Code2, Zap, Sparkles, RefreshCw } from 'lucide-vue-next'
+import { GitBranch, Cpu, Code2, Zap, RefreshCw } from 'lucide-vue-next'
 import type { AIToolSlug, ProjectMeta } from '~/types/vindicta'
 
 const props = defineProps<{
@@ -51,14 +51,8 @@ const activeToolLabel = computed(() => toolLabel(props.project.activeAITool ?? n
         </div>
       </div>
 
-      <div class="mt-4 flex items-start gap-3 max-w-3xl">
-        <div class="orb-wrap shrink-0" aria-hidden="true">
-          <div class="orb-ring orb-ring-a" />
-          <div class="orb-ring orb-ring-b" />
-          <div class="orb-core">
-            <Sparkles class="size-4 text-indigo-100" />
-          </div>
-        </div>
+      <div class="mt-4 flex max-w-3xl items-start gap-3 pl-4">
+        <ProjectGuideOrb class="shrink-0" />
         <div class="relative rounded-xl border border-indigo-500/20 bg-indigo-500/[0.06] px-4 py-3">
           <div class="absolute left-[-7px] top-5 size-3 rotate-45 border-l border-b border-indigo-500/20 bg-[#151327]" />
           <div class="flex items-start gap-3">
@@ -119,38 +113,3 @@ const activeToolLabel = computed(() => toolLabel(props.project.activeAITool ?? n
     </div>
   </div>
 </template>
-
-<style scoped>
-.orb-wrap {
-  position: relative;
-  width: 44px;
-  height: 44px;
-}
-
-.orb-core {
-  position: absolute;
-  inset: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 9999px;
-  background: radial-gradient(circle at 35% 30%, rgba(255,255,255,0.9), rgba(129,140,248,0.9) 38%, rgba(79,70,229,0.85));
-  box-shadow: 0 0 22px rgba(99,102,241,0.45);
-}
-
-.orb-ring {
-  position: absolute;
-  inset: 4px;
-  border: 1px solid rgba(165,180,252,0.32);
-  border-radius: 9999px;
-}
-
-.orb-ring-a {
-  transform: rotateX(62deg) rotateZ(-18deg);
-}
-
-.orb-ring-b {
-  transform: rotateX(62deg) rotateY(50deg) rotateZ(28deg);
-  border-color: rgba(34,211,238,0.25);
-}
-</style>

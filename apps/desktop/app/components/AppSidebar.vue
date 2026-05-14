@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { House, FolderKanban, UserCircle2, Settings, Sun, Moon, PanelLeftClose, PanelLeftOpen, Server, ShieldCheck } from 'lucide-vue-next'
+import { Check, ChevronDown, House, FolderKanban, UserCircle2, Settings, Sun, Moon, PanelLeftClose, PanelLeftOpen, Server, ShieldCheck } from 'lucide-vue-next'
 
 const route = useRoute()
 const router = useRouter()
 const projects = useProjectsStore()
 const app = useAppStore()
 const collapsed = useState('sidebar-collapsed', () => false)
+const projectSelectorOpen = ref(false)
 
 const navItems = [
   { icon: House,            label: 'Home',      to: '/', exact: true },
@@ -13,11 +14,6 @@ const navItems = [
 ]
 
 const activeProject = computed(() => projects.activeProject)
-const selectedProjectId = computed({
-  get: () => projects.activeProjectId ?? projects.projects[0]?.id ?? '',
-  set: (id: string) => selectProject(id),
-})
-
 const projectToolItems = computed(() => [
   {
     icon: FolderKanban,
@@ -40,10 +36,24 @@ function isActive(item: { to: string; exact?: boolean }) {
 function selectProject(id: string) {
   if (!id) return
   projects.setActive(id)
+  projectSelectorOpen.value = false
   if (route.path.startsWith('/projects/')) {
     void router.push(`/projects/${id}`)
   }
 }
+
+function projectInitials(name: string) {
+  const words = name.trim().split(/\s+/).filter(Boolean)
+  return (words[0]?.[0] ?? 'P') + (words[1]?.[0] ?? words[0]?.[1] ?? '')
+}
+
+function projectToolLabel(project: typeof projects.projects[number]) {
+  return project.activeAITool || project.aiTools?.[0] || project.aiTool || 'codex'
+}
+
+watch(() => route.fullPath, () => {
+  projectSelectorOpen.value = false
+})
 </script>
 
 <template>
@@ -148,20 +158,43 @@ function selectProject(id: string) {
           Active Project
         </label>
         <div class="relative">
-          <select
-            v-model="selectedProjectId"
-            class="h-9 w-full appearance-none rounded-lg border border-[var(--border)] bg-white/[0.04] px-2.5 pr-7 text-xs font-medium text-[var(--text)] outline-none transition-colors hover:bg-white/[0.06] focus:border-indigo-500/40"
+          <button
+            class="flex h-11 w-full items-center gap-2 rounded-xl border border-[var(--border)] bg-white/[0.04] px-2 text-left transition-colors hover:border-indigo-500/25 hover:bg-white/[0.06]"
+            @click="projectSelectorOpen = !projectSelectorOpen"
           >
-            <option
+            <span class="grid size-7 shrink-0 place-items-center rounded-lg border border-indigo-500/20 bg-indigo-500/10 text-[10px] font-bold uppercase text-indigo-200">
+              {{ activeProject ? projectInitials(activeProject.name) : 'PR' }}
+            </span>
+            <span class="min-w-0 flex-1">
+              <span class="block truncate text-xs font-semibold text-[var(--text)]">{{ activeProject?.name ?? 'Select project' }}</span>
+              <span class="mt-0.5 block truncate text-[10px] text-[var(--text-faint)]">
+                {{ activeProject?.code ?? 'No code' }} / {{ activeProject ? projectToolLabel(activeProject) : 'No tool' }}
+              </span>
+            </span>
+            <ChevronDown class="size-3.5 shrink-0 text-[var(--text-faint)] transition-transform" :class="projectSelectorOpen ? 'rotate-180' : ''" />
+          </button>
+
+          <div
+            v-if="projectSelectorOpen"
+            class="absolute bottom-[calc(100%+0.5rem)] left-0 right-0 z-30 overflow-hidden rounded-xl border border-[var(--border)] bg-[#111114]/95 shadow-2xl shadow-black/40 backdrop-blur-md"
+          >
+            <button
               v-for="project in projects.projects"
               :key="project.id"
-              :value="project.id"
-              class="bg-zinc-950 text-white"
+              class="flex w-full items-center gap-2 border-b border-white/[0.04] px-2.5 py-2 text-left transition-colors last:border-b-0 hover:bg-white/[0.06]"
+              :class="project.id === activeProject?.id ? 'bg-indigo-500/10' : ''"
+              @click="selectProject(project.id)"
             >
-              {{ project.name }}
-            </option>
-          </select>
-          <FolderKanban class="pointer-events-none absolute right-2 top-1/2 size-3.5 -translate-y-1/2 text-[var(--text-faint)]" />
+              <span class="grid size-7 shrink-0 place-items-center rounded-lg border border-white/10 bg-white/[0.05] text-[10px] font-bold uppercase text-white/70">
+                {{ projectInitials(project.name) }}
+              </span>
+              <span class="min-w-0 flex-1">
+                <span class="block truncate text-xs font-medium text-[var(--text)]">{{ project.name }}</span>
+                <span class="mt-0.5 block truncate text-[10px] text-[var(--text-faint)]">{{ project.code }} / {{ projectToolLabel(project) }}</span>
+              </span>
+              <Check v-if="project.id === activeProject?.id" class="size-3.5 shrink-0 text-indigo-300" />
+            </button>
+          </div>
         </div>
       </template>
       <NuxtLink

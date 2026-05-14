@@ -2,6 +2,8 @@ import type { VindictaJson } from '~/types/vindicta'
 import { VINDICTA_SCHEMA_VERSION, DEFAULT_KANBAN_COLUMNS, DEFAULT_ROLES } from '~/types/vindicta'
 import { nowISO } from '~/utils/date'
 
+const VINDICTA_SCHEMA_URL = 'https://raw.githubusercontent.com/surelle-ha/vindicta/main/schema/v7.json'
+
 function deriveProjectCode(name: string): string {
   const letters = name.toUpperCase().replace(/[^A-Z]/g, '')
   return letters.slice(0, 3).padEnd(3, 'X')
@@ -116,5 +118,5 @@ export function migrateVindictaJson(raw: unknown): VindictaJson {
     v = data.version as number
   }
 
-  return data as unknown as VindictaJson
+  return { ...data, $schema: VINDICTA_SCHEMA_URL } as unknown as VindictaJson
 }

@@ -6,6 +6,7 @@ import { generateId } from '~/utils/id'
 import { nowISO } from '~/utils/date'
 
 const FILENAME = 'vindicta.json'
+const SCHEMA_URL = 'https://raw.githubusercontent.com/surelle-ha/vindicta/main/schema/v7.json'
 
 export function useVindictaJson() {
   const fs = useTauriFs()
@@ -32,7 +33,7 @@ export function useVindictaJson() {
   ): Promise<VindictaJson> {
     const now = nowISO()
     const data: VindictaJson = {
-      $schema: 'https://vindicta.dev/schema/v7.json',
+      $schema: SCHEMA_URL,
       version: VINDICTA_SCHEMA_VERSION,
       meta: {
         ...meta,

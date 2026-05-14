@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { Zap, Plus, Calendar, Target, Play, Wand2, Loader2, Eye, Edit3, AlertCircle, ChevronDown, ChevronRight, Bot } from 'lucide-vue-next'
-import type { Sprint, Ticket, TicketType } from '~/types/vindicta'
+import { Zap, Plus, Calendar, Target, Play, Wand2, Loader2, Eye, Edit3, AlertCircle, ChevronDown, ChevronRight, Bot, FileText, Download } from 'lucide-vue-next'
+import type { Sprint, Ticket, TicketPriority, TicketStatus, TicketType } from '~/types/vindicta'
 import { ticketKey } from '~/utils/ticket'
-import { runCodexExec } from '~/composables/useCodexShell'
+import { friendlyCodexExecError, runCodexExec } from '~/composables/useCodexShell'
 import { renderMarkdown } from '~/utils/markdown'
+import { createVindictaSprintDocx, createVindictaSprintPdf } from '~/utils/docx'
 
 const sprint = useSprintStore()
 const kanban = useKanbanStore()
@@ -23,6 +24,14 @@ const selectedHandoverTool = ref<'codex' | 'claude'>('codex')
 const selectedHandoverEffort = ref<'low' | 'medium' | 'high'>('medium')
 const handoverRunning = ref(false)
 const handoverError = ref<string | null>(null)
+const showEndConfirm = ref(false)
+const showReportPrompt = ref(false)
+const showSprintReportPreview = ref(false)
+const sprintReportMarkdown = ref('')
+const sprintReportTitle = ref('')
+const sprintReportSnapshot = ref<{ sprint: Sprint; tickets: Ticket[]; completed: Ticket[]; incomplete: Ticket[] } | null>(null)
+const exportingSprintReport = ref(false)
+const { saveFile } = useTauriDialog()
 
 function openTicketPicker(s: Sprint) {
   pickerSprint.value = s
@@ -211,15 +220,167 @@ Instructions:
 - If a ticket is too large or unclear, make the safest useful progress and document the blocker.
 - Run relevant lightweight checks when available.
 
-Return a concise markdown handover report with these sections:
-## Summary
-## Tickets Worked
-## Changed Files
-## Checks Run
-## Blockers
-## Follow-ups
+Return ONLY a JSON object. No markdown fences, no prose.
+Schema:
+{
+  "summary": "Brief handover summary",
+  "activity": [{"label":"Observable step","detail":"What happened, commands/checks run, or file area reviewed","files":["relative/path.ts"]}],
+  "ticketUpdates": [{"ticketId":"ticket id from input","status":"todo|in_progress|in_review|done|backlog|cancelled","comment":"AI-visible progress summary for the ticket","changedFiles":["relative/path.ts"]}],
+  "findings": [{"title":"Out-of-scope issue or suggestion","type":"bug|fix|chore|spike|feature","priority":"low|medium|high|critical","detail":"Why it matters","evidence":"Where you noticed it","recommendation":"Suggested follow-up"}],
+  "markdownReport": "Markdown report with Summary, Tickets Worked, Changed Files, Checks Run, Blockers, Follow-ups, and Suggestions"
+}
 
+For ticketUpdates:
+- Include every sprint ticket.
+- Use "done" only when the ticket is completed.
+- Use "in_review" when code changed and needs review.
+- Use "in_progress" when partially worked.
+- Keep "todo" only when untouched.
+
+For findings, collect only useful out-of-scope suggestions, possible issues, tech debt, or bugs that should be considered for backlog.
 Report observable actions and output only. Do not include private chain-of-thought.`
+}
+
+function extractJsonObject(value: string) {
+  const text = value
+    .trim()
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/i, '')
+
+  for (let start = text.indexOf('{'); start >= 0; start = text.indexOf('{', start + 1)) {
+    let depth = 0
+    let inString = false
+    let escaped = false
+
+    for (let index = start; index < text.length; index += 1) {
+      const char = text[index]
+      if (inString) {
+        if (escaped) {
+          escaped = false
+        }
+        else if (char === '\\') {
+          escaped = true
+        }
+        else if (char === '"') {
+          inString = false
+        }
+        continue
+      }
+
+      if (char === '"') {
+        inString = true
+      }
+      else if (char === '{') {
+        depth += 1
+      }
+      else if (char === '}') {
+        depth -= 1
+        if (depth === 0) {
+          const candidate = text.slice(start, index + 1)
+          try {
+            return JSON.parse(candidate)
+          }
+          catch {
+            break
+          }
+        }
+      }
+    }
+  }
+
+  throw new Error('No valid JSON object found in Codex response.')
+}
+
+function normalizeTicketStatus(value: unknown): TicketStatus {
+  const status = String(value ?? '').trim()
+  return ['backlog', 'todo', 'in_progress', 'in_review', 'done', 'cancelled'].includes(status)
+    ? status as TicketStatus
+    : 'in_progress'
+}
+
+function normalizeTicketPriority(value: unknown): TicketPriority {
+  const priority = String(value ?? '').trim()
+  return ['low', 'medium', 'high', 'critical'].includes(priority)
+    ? priority as TicketPriority
+    : 'medium'
+}
+
+function normalizeTicketType(value: unknown): TicketType {
+  const type = String(value ?? '').trim()
+  return ['feature', 'bug', 'fix', 'chore', 'spike'].includes(type)
+    ? type as TicketType
+    : 'chore'
+}
+
+async function applyHandoverArtifacts(jobId: string, rawText: string, sprintTickets: Ticket[]) {
+  let parsed: any
+  try {
+    parsed = extractJsonObject(rawText)
+  }
+  catch {
+    aiActivity.addEvent(jobId, 'Ticket sync needs review', 'Codex returned output, but it could not be parsed into structured ticket updates.', 'warning')
+    return { report: rawText, summary: 'Codex finished handover, but structured updates could not be parsed.' }
+  }
+
+  const ticketUpdates = Array.isArray(parsed.ticketUpdates)
+    ? parsed.ticketUpdates
+        .map((item: any) => ({
+          ticketId: String(item?.ticketId ?? ''),
+          status: normalizeTicketStatus(item?.status),
+          comment: String(item?.comment ?? '').trim(),
+          changedFiles: Array.isArray(item?.changedFiles) ? item.changedFiles.map(String).filter(Boolean) : [],
+        }))
+        .filter((item: any) => sprintTickets.some(ticket => ticket.id === item.ticketId))
+    : []
+
+  const findings = Array.isArray(parsed.findings)
+    ? parsed.findings
+        .map((item: any) => ({
+          title: String(item?.title ?? 'Untitled follow-up').trim(),
+          type: normalizeTicketType(item?.type),
+          priority: normalizeTicketPriority(item?.priority),
+          detail: String(item?.detail ?? '').trim(),
+          evidence: String(item?.evidence ?? '').trim(),
+          recommendation: String(item?.recommendation ?? '').trim(),
+        }))
+        .filter((item: any) => item.title)
+    : []
+
+  const activity = Array.isArray(parsed.activity)
+    ? parsed.activity
+        .map((item: any) => ({
+          label: String(item?.label ?? 'Observed activity').trim(),
+          detail: [
+            String(item?.detail ?? '').trim(),
+            Array.isArray(item?.files) && item.files.length ? `Files: ${item.files.map(String).join(', ')}` : '',
+          ].filter(Boolean).join('\n'),
+        }))
+        .filter((item: any) => item.label)
+    : []
+
+  aiActivity.updateJobArtifacts(jobId, { ticketUpdates, findings, events: activity })
+
+  for (const update of ticketUpdates) {
+    const ticket = kanban.tickets.find(item => item.id === update.ticketId)
+    if (ticket?.comments?.some(comment => comment.text.startsWith('AI handover completed, but Vindicta could not parse structured ticket updates.'))) {
+      await kanban.updateTicket(update.ticketId, {
+        comments: ticket.comments.filter(comment => !comment.text.startsWith('AI handover completed, but Vindicta could not parse structured ticket updates.')),
+      })
+    }
+    await kanban.moveTicket(update.ticketId, update.status)
+    const changedFiles = update.changedFiles.length ? `\n\nChanged files:\n${update.changedFiles.map(file => `- ${file}`).join('\n')}` : ''
+    await kanban.addComment(
+      update.ticketId,
+      `${update.comment || 'AI handover updated this ticket.'}${changedFiles}`,
+      'AI Agent',
+      true,
+    )
+  }
+
+  return {
+    report: String(parsed.markdownReport ?? rawText).trim(),
+    summary: String(parsed.summary ?? 'Codex finished handover and synced ticket updates.').trim(),
+  }
 }
 
 async function runAIHandover() {
@@ -256,6 +417,12 @@ async function runAIHandover() {
   emit('aiHandoverStarted')
 
   try {
+    aiActivity.addEvent(
+      jobId,
+      'Context packaged',
+      `${sprintTickets.length} ticket${sprintTickets.length === 1 ? '' : 's'} prepared with ${effort.label.toLowerCase()} effort guidance.`,
+      'running',
+    )
     aiActivity.addEvent(jobId, 'Launching Codex', 'Starting Codex with workspace-write access for this project.', 'running')
     const result = await runCodexExec({
       projectPath: project.absolutePath,
@@ -264,6 +431,7 @@ async function runAIHandover() {
       reasoningEffort: effort.value,
       sandbox: 'workspace-write',
     })
+    aiActivity.addEvent(jobId, 'Reading Codex report', 'Codex returned control to Vindicta. Parsing the handover report and status.', 'running')
     const responseText = [result.stdout, result.stderr].filter(Boolean).join('\n').trim()
     if (result.code !== 0) {
       throw new Error(responseText || 'Codex handover failed.')
@@ -271,14 +439,15 @@ async function runAIHandover() {
     if (!responseText) {
       throw new Error('Codex completed without returning a handover report.')
     }
-    aiActivity.finishJob(jobId, 'done', `Codex finished handover for ${s.name}.`, responseText)
+    const applied = await applyHandoverArtifacts(jobId, responseText, sprintTickets)
+    aiActivity.finishJob(jobId, 'done', applied.summary || `Codex finished handover for ${s.name}.`, applied.report || responseText)
     notify(`AI handover complete for "${s.name}".`, 'success')
   }
   catch (e: any) {
     const message = friendlyCodexError(e?.message ?? 'AI handover failed.')
     handoverError.value = message
     aiActivity.finishJob(jobId, 'error', message)
-    notify('AI handover failed.', 'error')
+    notify(`AI handover failed: ${message}`, 'error')
   }
   finally {
     handoverRunning.value = false
@@ -353,10 +522,7 @@ function extractJsonArray(value: string) {
 }
 
 function friendlyCodexError(message: string) {
-  if (/@openai\/codex-win32-x64|Missing optional dependency/i.test(message)) {
-    return 'Codex CLI is installed but its Windows runtime dependency is missing. Open Settings > Doctor and use Install/Repair Codex, or run npm install -g @openai/codex@latest.'
-  }
-  return message
+  return friendlyCodexExecError(message)
 }
 
 async function requestClarifications(): Promise<'questions' | 'none' | 'error'> {
@@ -635,14 +801,66 @@ async function markDone(ticketId: string) {
   await kanban.moveTicket(ticketId, 'done')
 }
 
-async function completeActiveSprint() {
+function cloneTicketForReport(ticket: Ticket): Ticket {
+  return {
+    ...ticket,
+    labels: [...ticket.labels],
+    roleIds: [...ticket.roleIds],
+    comments: [...(ticket.comments ?? [])],
+  }
+}
+
+function buildSprintReportMarkdown(snapshot: { sprint: Sprint; tickets: Ticket[]; completed: Ticket[]; incomplete: Ticket[] }) {
+  const project = projects.activeProject
+  const lines = [
+    `# Sprint Report: ${snapshot.sprint.name}`,
+    '',
+    `**Project:** ${project?.name ?? 'Unknown project'}`,
+    `**Sprint window:** ${formatDate(snapshot.sprint.startDate)} to ${formatDate(snapshot.sprint.endDate)}`,
+    `**Generated:** ${new Date().toLocaleString()}`,
+    '',
+    '## Goal',
+    snapshot.sprint.goal || 'No sprint goal was recorded.',
+    '',
+    '## Outcome',
+    `- Total tickets in sprint: ${snapshot.tickets.length}`,
+    `- Completed tickets: ${snapshot.completed.length}`,
+    `- Returned to backlog: ${snapshot.incomplete.length}`,
+    '',
+    '## Completed Tickets',
+    snapshot.completed.length
+      ? snapshot.completed.map(ticket => [
+          `### ${projects.activeProject?.code && ticket.number ? ticketKey(projects.activeProject.code, ticket.number) : `#${ticket.number}`} ${ticket.title}`,
+          `- Type: ${ticket.type}`,
+          `- Priority: ${ticket.priority}`,
+          `- Status: ${ticket.status}`,
+          ticket.comments?.length ? `- Notes: ${ticket.comments.slice(-2).map(comment => comment.text.replace(/\s+/g, ' ').slice(0, 220)).join(' | ')}` : '- Notes: No comments recorded.',
+        ].join('\n')).join('\n\n')
+      : 'No tickets were marked done before the sprint was ended.',
+    '',
+    '## Incomplete Tickets Returned To Backlog',
+    snapshot.incomplete.length
+      ? snapshot.incomplete.map(ticket => `- ${projects.activeProject?.code && ticket.number ? ticketKey(projects.activeProject.code, ticket.number) : `#${ticket.number}`} ${ticket.title} (${ticket.status})`).join('\n')
+      : 'No incomplete tickets were returned to the backlog.',
+  ]
+  return lines.join('\n')
+}
+
+function openEndSprintConfirm() {
   if (!activeSprint.value) return
+  showEndConfirm.value = true
+}
+
+async function completeActiveSprintCore() {
+  if (!activeSprint.value) return null
   const sprintId = activeSprint.value.id
-  const tickets = activeTickets.value
+  const active = activeSprint.value
+  const tickets = activeTickets.value.map(cloneTicketForReport)
   const completedIds = tickets
     .filter(ticket => ticket.status === 'done')
     .map(ticket => ticket.id)
   const incompleteTickets = tickets.filter(ticket => ticket.status !== 'done')
+  const completedTickets = tickets.filter(ticket => ticket.status === 'done')
 
   for (const ticket of incompleteTickets) {
     await kanban.updateTicket(ticket.id, {
@@ -653,12 +871,74 @@ async function completeActiveSprint() {
   }
 
   await sprint.completeSprint(sprintId, completedIds)
+  const snapshot = { sprint: { ...active, ticketIds: completedIds, status: 'completed' as const }, tickets, completed: completedTickets, incomplete: incompleteTickets }
   notify(
     incompleteTickets.length
       ? `Sprint ended. ${incompleteTickets.length} incomplete ticket${incompleteTickets.length !== 1 ? 's' : ''} moved to backlog.`
       : 'Sprint ended.',
     'success',
   )
+  return snapshot
+}
+
+async function confirmEndSprint() {
+  showEndConfirm.value = false
+  const snapshot = await completeActiveSprintCore()
+  if (!snapshot) return
+  sprintReportSnapshot.value = snapshot
+  sprintReportMarkdown.value = buildSprintReportMarkdown(snapshot)
+  sprintReportTitle.value = `Sprint Report - ${snapshot.sprint.name}`
+  showReportPrompt.value = true
+}
+
+function openSprintReportPreview() {
+  showReportPrompt.value = false
+  showSprintReportPreview.value = true
+}
+
+function sanitizeFileName(value: string) {
+  return value.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '-').replace(/\s+/g, ' ').trim().slice(0, 140) || 'sprint-report'
+}
+
+function ensureExtension(path: string, extension: string) {
+  return path.toLowerCase().endsWith(`.${extension}`) ? path : `${path}.${extension}`
+}
+
+async function exportSprintReport(format: 'docx' | 'pdf') {
+  const snapshot = sprintReportSnapshot.value
+  if (!snapshot) return
+  exportingSprintReport.value = true
+  try {
+    const defaultName = sanitizeFileName(`${sprintReportTitle.value}.${format}`)
+    const path = await saveFile({
+      title: `Export sprint report as ${format.toUpperCase()}`,
+      defaultPath: defaultName,
+      filters: [{ name: format === 'docx' ? 'Word Document' : 'PDF Document', extensions: [format] }],
+    })
+    if (!path) return
+    const fs = useTauriFs()
+    const report = {
+      projectName: projects.activeProject?.name ?? 'Unknown project',
+      projectCode: projects.activeProject?.code ?? '',
+      sprintName: snapshot.sprint.name,
+      sprintGoal: snapshot.sprint.goal,
+      generatedAt: new Date().toISOString(),
+      markdown: sprintReportMarkdown.value,
+      completedTickets: snapshot.completed,
+      incompleteTickets: snapshot.incomplete,
+    }
+    const bytes = format === 'docx'
+      ? createVindictaSprintDocx(report)
+      : createVindictaSprintPdf(report)
+    await fs.writeFile(ensureExtension(path, format), bytes)
+    notify(`Sprint report exported as ${format.toUpperCase()}.`, 'success')
+  }
+  catch (e: any) {
+    notify(e?.message ?? 'Could not export sprint report.', 'error')
+  }
+  finally {
+    exportingSprintReport.value = false
+  }
 }
 </script>
 
@@ -697,7 +977,7 @@ async function completeActiveSprint() {
               <Plus class="size-3.5" />
               Add tickets
             </GlassButton>
-            <GlassButton variant="ghost" size="sm" @click="completeActiveSprint">
+            <GlassButton variant="ghost" size="sm" @click="openEndSprintConfirm">
               End Sprint
             </GlassButton>
           </div>
@@ -890,44 +1170,6 @@ async function completeActiveSprint() {
           </div>
         </div>
 
-        <div class="rounded-lg border border-indigo-500/20 bg-indigo-500/[0.06] p-3">
-          <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p class="text-xs font-semibold uppercase tracking-wider text-indigo-200">Skip AI planning</p>
-              <p class="mt-1 text-xs leading-relaxed text-indigo-100/60">
-                Create the sprint now, with or without selected existing tickets.
-              </p>
-            </div>
-            <div class="flex shrink-0 flex-wrap gap-2">
-              <button
-                class="rounded-lg border border-indigo-500/25 bg-indigo-500/10 px-3 py-2 text-xs font-medium text-indigo-100 transition-colors hover:bg-indigo-500/15 disabled:opacity-50"
-                :disabled="creatingTickets"
-                @click="finishCreate(false, false)"
-              >
-                Create sprint only
-              </button>
-              <button
-                v-if="selectedExistingCount"
-                class="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-indigo-500 disabled:opacity-50"
-                :disabled="creatingTickets"
-                @click="finishCreate(false, true)"
-              >
-                Create + {{ selectedExistingCount }} existing
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div
-          v-if="startsImmediately"
-          class="flex items-start gap-2.5 px-3 py-2.5 rounded-lg bg-amber-500/10 border border-amber-500/25 text-amber-300"
-        >
-          <Zap class="size-3.5 mt-0.5 shrink-0 text-amber-400" />
-          <p class="text-xs leading-relaxed">
-            <span class="font-semibold">This sprint will start immediately</span> — the start time is now or in the past.
-            Change the date to schedule it later, or proceed to launch now.
-          </p>
-        </div>
 
         <div class="rounded-lg border border-[var(--border)] bg-white/[0.03] p-3">
           <div class="flex items-center justify-between gap-3">
@@ -978,18 +1220,50 @@ async function completeActiveSprint() {
           </p>
         </div>
 
+        <div class="rounded-lg border border-indigo-500/20 bg-indigo-500/[0.06] p-3">
+          <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p class="text-xs font-semibold uppercase tracking-wider text-indigo-200">Skip AI planning</p>
+              <p class="mt-1 text-xs leading-relaxed text-indigo-100/60">
+                Create the sprint now, with or without selected existing tickets.
+              </p>
+            </div>
+            <div class="flex shrink-0 flex-wrap gap-2">
+              <button
+                class="rounded-lg border border-indigo-500/25 bg-indigo-500/10 px-3 py-2 text-xs font-medium text-indigo-100 transition-colors hover:bg-indigo-500/15 disabled:opacity-50"
+                :disabled="creatingTickets"
+                @click="finishCreate(false, false)"
+              >
+                Create sprint only
+              </button>
+              <button
+                v-if="selectedExistingCount"
+                class="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-indigo-500 disabled:opacity-50"
+                :disabled="creatingTickets"
+                @click="finishCreate(false, true)"
+              >
+                Create + {{ selectedExistingCount }} existing
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div
+          v-if="startsImmediately"
+          class="flex items-start gap-2.5 px-3 py-2.5 rounded-lg bg-amber-500/10 border border-amber-500/25 text-amber-300"
+        >
+          <Zap class="size-3.5 mt-0.5 shrink-0 text-amber-400" />
+          <p class="text-xs leading-relaxed">
+            <span class="font-semibold">This sprint will start immediately</span> - the start time is now or in the past.
+            Change the date to schedule it later, or proceed to launch now.
+          </p>
+        </div>
+
         <div class="flex flex-col gap-2 border-t border-[var(--border)] pt-4 sm:flex-row sm:items-center sm:justify-between">
           <button class="text-xs text-white/40 hover:text-white/60 transition-colors" @click="showCreate = false">
             Cancel
           </button>
           <div class="flex flex-wrap justify-end gap-2">
-            <button
-              class="rounded-lg border border-[var(--border)] px-3 py-2 text-xs font-medium text-[var(--text-muted)] transition-colors hover:bg-white/[0.05] hover:text-[var(--text)] disabled:opacity-50"
-              :disabled="creatingTickets"
-              @click="finishCreate(false, false)"
-            >
-              Create sprint only
-            </button>
             <button
               v-if="selectedExistingCount"
               class="rounded-lg border border-indigo-500/25 bg-indigo-500/10 px-3 py-2 text-xs font-medium text-indigo-200 transition-colors hover:bg-indigo-500/15 disabled:opacity-50"
@@ -1308,6 +1582,80 @@ async function completeActiveSprint() {
             <Bot v-else class="size-3.5" />
             Start {{ selectedHandoverEffortOption.label }} Handover
           </button>
+        </div>
+      </div>
+    </GlassModal>
+
+    <GlassModal v-model="showEndConfirm" title="End Sprint" max-width="sm">
+      <div class="space-y-4">
+        <div class="rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs leading-relaxed text-amber-100/85">
+          Ending this sprint will close it now. Done tickets stay with the completed sprint, and unfinished tickets move back to the backlog.
+        </div>
+        <div v-if="activeSprint" class="rounded-lg border border-[var(--border)] bg-black/10 px-3 py-2">
+          <p class="text-sm font-semibold text-[var(--text)]">{{ activeSprint.name }}</p>
+          <p class="mt-1 text-xs text-[var(--text-muted)]">
+            {{ activeTickets.filter(ticket => ticket.status === 'done').length }} done, {{ activeTickets.filter(ticket => ticket.status !== 'done').length }} unfinished
+          </p>
+        </div>
+        <div class="flex justify-end gap-2 border-t border-[var(--border)] pt-4">
+          <button class="rounded-lg border border-[var(--border)] px-3 py-2 text-xs text-[var(--text-muted)] hover:text-[var(--text)]" @click="showEndConfirm = false">
+            Cancel
+          </button>
+          <button class="rounded-lg bg-amber-600 px-4 py-2 text-xs font-medium text-white hover:bg-amber-500" @click="confirmEndSprint">
+            End Sprint
+          </button>
+        </div>
+      </div>
+    </GlassModal>
+
+    <GlassModal v-model="showReportPrompt" title="Generate Sprint Report?" max-width="sm">
+      <div class="space-y-4">
+        <div class="flex items-start gap-3 rounded-lg border border-indigo-500/20 bg-indigo-500/10 px-3 py-2">
+          <FileText class="mt-0.5 size-4 shrink-0 text-indigo-300" />
+          <p class="text-sm leading-relaxed text-[var(--text-muted)]">
+            The sprint is complete. Generate a report with accomplished tickets, returned backlog items, and sprint summary?
+          </p>
+        </div>
+        <div class="flex justify-end gap-2 border-t border-[var(--border)] pt-4">
+          <button class="rounded-lg border border-[var(--border)] px-3 py-2 text-xs text-[var(--text-muted)] hover:text-[var(--text)]" @click="showReportPrompt = false">
+            Not now
+          </button>
+          <button class="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-medium text-white hover:bg-indigo-500" @click="openSprintReportPreview">
+            <FileText class="size-3.5" />
+            Preview Report
+          </button>
+        </div>
+      </div>
+    </GlassModal>
+
+    <GlassModal v-model="showSprintReportPreview" title="Sprint Report Preview" max-width="xl">
+      <div class="space-y-4">
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p class="text-sm font-semibold text-[var(--text)]">{{ sprintReportTitle }}</p>
+            <p class="mt-0.5 text-xs text-[var(--text-muted)]">Review the generated markdown before exporting.</p>
+          </div>
+          <div class="flex gap-2">
+            <button
+              class="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-2 text-xs text-[var(--text-muted)] hover:text-[var(--text)] disabled:opacity-50"
+              :disabled="exportingSprintReport"
+              @click="exportSprintReport('docx')"
+            >
+              <Download class="size-3.5" />
+              DOCX
+            </button>
+            <button
+              class="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-2 text-xs text-[var(--text-muted)] hover:text-[var(--text)] disabled:opacity-50"
+              :disabled="exportingSprintReport"
+              @click="exportSprintReport('pdf')"
+            >
+              <Download class="size-3.5" />
+              PDF
+            </button>
+          </div>
+        </div>
+        <div class="max-h-[60vh] overflow-auto rounded-lg border border-[var(--border)] bg-black/20 p-4 custom-scroll">
+          <div class="markdown-preview" v-html="renderMarkdown(sprintReportMarkdown)" />
         </div>
       </div>
     </GlassModal>

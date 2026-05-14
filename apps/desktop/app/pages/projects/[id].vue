@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { Bot, Cloud } from 'lucide-vue-next'
+import { Bot, Clock3, FolderOpen, Info, KanbanSquare, ListTodo, Settings, Sparkles, Users } from 'lucide-vue-next'
+import type { Component } from 'vue'
 
 const route = useRoute()
 const projectsStore = useProjectsStore()
@@ -11,7 +12,6 @@ const activeTab = ref<string>('info')
 const showAIToolPicker = ref(false)
 const projectId = computed(() => route.params.id as string)
 const project = computed(() => projectsStore.projects.find((p) => p.id === projectId.value))
-const projectAIJobs = computed(() => aiActivity.projectJobs(projectId.value))
 
 onMounted(async () => {
   await aiActivity.load()
@@ -57,27 +57,27 @@ function openSprintBoard() {
   activeTab.value = 'kanban'
 }
 
-const allTabs: { id: string; label: string; icon?: typeof Cloud; sprintOnly?: boolean }[] = [
-  { id: 'info',     label: 'Info' },
-  { id: 'kanban',   label: 'Board' },
-  { id: 'tickets',  label: 'Tickets' },
-  { id: 'sprint',   label: 'Sprints' },
+const allTabs: { id: string; label: string; icon: Component; sprintOnly?: boolean }[] = [
   { id: 'ai-workspace', label: 'AI Workspace', icon: Bot, sprintOnly: true },
-  { id: 'files',    label: 'Files' },
-  { id: 'members',  label: 'Members', icon: Cloud },
-  { id: 'history',  label: 'History' },
-  { id: 'settings', label: 'Settings' },
+  { id: 'info',     label: 'Info', icon: Info },
+  { id: 'kanban',   label: 'Board', icon: KanbanSquare },
+  { id: 'tickets',  label: 'Tickets', icon: ListTodo },
+  { id: 'sprint',   label: 'Sprints', icon: Sparkles },
+  { id: 'files',    label: 'Files', icon: FolderOpen },
+  { id: 'members',  label: 'Members', icon: Users },
+  { id: 'history',  label: 'History', icon: Clock3 },
+  { id: 'settings', label: 'Settings', icon: Settings },
 ]
 
 const tabs = computed(() =>
   allTabs.filter((t) => {
-    if (t.id === 'ai-workspace') return projectAIJobs.value.length > 0
+    if (t.id === 'ai-workspace') return true
     return !t.sprintOnly || sprint.activeSprint !== null
   }),
 )
 
 watch(() => route.query.tab, (tab) => {
-  if (tab === 'ai-workspace' && projectAIJobs.value.length > 0) {
+  if (tab === 'ai-workspace') {
     activeTab.value = 'ai-workspace'
   }
 }, { immediate: true })
@@ -124,11 +124,15 @@ watch(tabs, (visibleTabs) => {
               :key="tab.id"
               class="px-3 py-2 text-xs font-medium transition-colors relative whitespace-nowrap flex items-center gap-1"
               :class="activeTab === tab.id
-                ? 'text-[var(--text)] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-px after:bg-indigo-500'
-                : 'text-[var(--text-faint)] hover:text-[var(--text-muted)]'"
+                ? tab.id === 'ai-workspace'
+                  ? 'text-amber-200 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-px after:bg-amber-300'
+                  : 'text-[var(--text)] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-px after:bg-indigo-500'
+                : tab.id === 'ai-workspace'
+                  ? 'text-amber-300/75 hover:text-amber-200'
+                  : 'text-[var(--text-faint)] hover:text-[var(--text-muted)]'"
               @click="activeTab = tab.id"
             >
-              <component :is="tab.icon" v-if="tab.icon" class="size-3" />
+              <component :is="tab.icon" class="size-3" />
               {{ tab.label }}
             </button>
           </div>

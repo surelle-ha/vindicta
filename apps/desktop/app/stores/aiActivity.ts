@@ -11,6 +11,25 @@ export interface AIActivityEvent {
   status: AIActivityStatus
 }
 
+export interface AIHandoverTicketUpdate {
+  ticketId: string
+  status: string
+  comment: string
+  changedFiles: string[]
+}
+
+export interface AIHandoverFinding {
+  id: string
+  title: string
+  type: string
+  priority: string
+  detail: string
+  evidence: string
+  recommendation: string
+  status: 'open' | 'backlogged' | 'dismissed'
+  selected: boolean
+}
+
 export interface AIActivityJob {
   id: string
   kind: AIActivityKind
@@ -31,6 +50,8 @@ export interface AIActivityJob {
   error: string | null
   ticketCount: number
   events: AIActivityEvent[]
+  ticketUpdates: AIHandoverTicketUpdate[]
+  findings: AIHandoverFinding[]
 }
 
 function activityId(prefix: string) {
@@ -140,6 +161,8 @@ export const useAIActivityStore = defineStore('aiActivity', {
           detail: input.firstDetail ?? 'AI work started.',
           status: 'running',
         }],
+        ticketUpdates: [],
+        findings: [],
       }
       this.jobs = [job, ...this.jobs].slice(0, 30)
       this.activeJobId = job.id
@@ -169,6 +192,37 @@ export const useAIActivityStore = defineStore('aiActivity', {
       job.output = [job.output, output.trim()].filter(Boolean).join('\n\n')
       void this.persist()
     },
+    updateJobArtifacts(jobId: string | null, artifacts: {
+      ticketUpdates?: AIHandoverTicketUpdate[]
+      findings?: Omit<AIHandoverFinding, 'id' | 'status' | 'selected'>[]
+      events?: Omit<AIActivityEvent, 'id' | 'at' | 'status'>[]
+    }) {
+      if (!jobId) return
+      const job = this.jobs.find(item => item.id === jobId)
+      if (!job) return
+      if (artifacts.ticketUpdates) job.ticketUpdates = artifacts.ticketUpdates
+      if (artifacts.findings) {
+        job.findings = artifacts.findings.map(finding => ({
+          ...finding,
+          id: activityId('ai_find'),
+          status: 'open',
+          selected: true,
+        }))
+      }
+      if (artifacts.events?.length) {
+        job.events = [
+          ...artifacts.events.map(event => ({
+            id: activityId('ai_evt'),
+            at: nowIso(),
+            label: event.label,
+            detail: event.detail,
+            status: 'running' as AIActivityStatus,
+          })),
+          ...job.events,
+        ]
+      }
+      void this.persist()
+    },
     finishJob(jobId: string | null, status: AIActivityStatus, summary: string, output?: string) {
       if (!jobId) return
       const job = this.jobs.find(item => item.id === jobId)
@@ -186,6 +240,13 @@ export const useAIActivityStore = defineStore('aiActivity', {
         detail: summary,
         status,
       })
+      void this.persist()
+    },
+    updateFinding(jobId: string, findingId: string, updates: Partial<AIHandoverFinding>) {
+      const job = this.jobs.find(item => item.id === jobId)
+      const finding = job?.findings.find(item => item.id === findingId)
+      if (!finding) return
+      Object.assign(finding, updates)
       void this.persist()
     },
     dismiss(jobId: string) {
@@ -236,6 +297,27 @@ function normalizeJobs(value: unknown): AIActivityJob[] {
             label: String(event?.label ?? 'Activity'),
             detail: String(event?.detail ?? ''),
             status: ['pending', 'running', 'done', 'warning', 'error', 'interrupted'].includes(event?.status) ? event.status : 'warning',
+          }))
+        : [],
+      ticketUpdates: Array.isArray(job?.ticketUpdates)
+        ? job.ticketUpdates.map((update: any) => ({
+            ticketId: String(update?.ticketId ?? ''),
+            status: String(update?.status ?? ''),
+            comment: String(update?.comment ?? ''),
+            changedFiles: Array.isArray(update?.changedFiles) ? update.changedFiles.map(String) : [],
+          })).filter((update: AIHandoverTicketUpdate) => update.ticketId)
+        : [],
+      findings: Array.isArray(job?.findings)
+        ? job.findings.map((finding: any) => ({
+            id: String(finding?.id ?? activityId('ai_find')),
+            title: String(finding?.title ?? 'Untitled finding'),
+            type: String(finding?.type ?? 'chore'),
+            priority: String(finding?.priority ?? 'medium'),
+            detail: String(finding?.detail ?? ''),
+            evidence: String(finding?.evidence ?? ''),
+            recommendation: String(finding?.recommendation ?? ''),
+            status: ['open', 'backlogged', 'dismissed'].includes(finding?.status) ? finding.status : 'open',
+            selected: Boolean(finding?.selected ?? finding?.status !== 'backlogged'),
           }))
         : [],
     }))

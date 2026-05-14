@@ -1,3 +1,5 @@
+import type { Ticket } from '~/types/vindicta'
+
 export interface VindictaDocxFinding {
   id: string
   title: string
@@ -323,4 +325,172 @@ export function createVindictaSecurityDocx(report: VindictaSecurityDocxReport) {
   ]
 
   return createZip(files)
+}
+
+export interface VindictaSprintDocReport {
+  projectName: string
+  projectCode: string
+  sprintName: string
+  sprintGoal: string
+  generatedAt: string
+  markdown: string
+  completedTickets: Ticket[]
+  incompleteTickets: Ticket[]
+}
+
+function buildSprintDocumentXml(report: VindictaSprintDocReport) {
+  const body = [
+    para('Vindicta Sprint Report', 'Title'),
+    para(report.sprintName, 'Subtitle'),
+    para(`Project: ${report.projectName || 'Unknown project'}`, 'Heading1'),
+    para(`Project code: ${report.projectCode || 'N/A'}`),
+    para(`Generated: ${new Date(report.generatedAt).toLocaleString()}`),
+    para('Sprint Goal', 'Heading1'),
+    para(report.sprintGoal || 'No sprint goal was recorded.'),
+    para('Outcome', 'Heading1'),
+    stat('Completed tickets', report.completedTickets.length),
+    stat('Returned to backlog', report.incompleteTickets.length),
+    para('Completed Tickets', 'Heading1'),
+    ...(report.completedTickets.length
+      ? report.completedTickets.flatMap(ticket => [
+          para(`#${ticket.number} ${ticket.title}`, 'Heading2'),
+          stat('Type', ticket.type),
+          stat('Priority', ticket.priority),
+          stat('Status', ticket.status),
+          para(ticket.description || 'No description provided.'),
+        ])
+      : [para('No tickets were marked done before the sprint was ended.')]),
+    para('Incomplete Tickets Returned To Backlog', 'Heading1'),
+    ...(report.incompleteTickets.length
+      ? report.incompleteTickets.map(ticket => bullet(`#${ticket.number} ${ticket.title} (${ticket.status})`))
+      : [para('No incomplete tickets were returned to the backlog.')]),
+    para('Markdown Source', 'Heading1'),
+    para(report.markdown || 'No markdown report was generated.', 'CodeBlock'),
+  ].join('')
+
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:wpc="http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:wp14="http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:w10="urn:schemas-microsoft-com:office:word" xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" mc:Ignorable="w14 wp14">
+  <w:body>
+    ${body}
+    <w:sectPr>
+      <w:pgSz w:w="12240" w:h="15840"/>
+      <w:pgMar w:top="1080" w:right="1080" w:bottom="1080" w:left="1080" w:header="720" w:footer="720" w:gutter="0"/>
+    </w:sectPr>
+  </w:body>
+</w:document>`
+}
+
+export function createVindictaSprintDocx(report: VindictaSprintDocReport) {
+  const now = new Date(report.generatedAt).toISOString()
+  return createZip([
+    {
+      name: '[Content_Types].xml',
+      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+  <Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
+  <Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>
+  <Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>
+</Types>`,
+    },
+    {
+      name: '_rels/.rels',
+      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>
+  <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>
+</Relationships>`,
+    },
+    {
+      name: 'word/_rels/document.xml.rels',
+      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+</Relationships>`,
+    },
+    { name: 'word/document.xml', content: buildSprintDocumentXml(report) },
+    { name: 'word/styles.xml', content: buildStylesXml() },
+    {
+      name: 'docProps/core.xml',
+      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <dc:title>${xml(`Vindicta Sprint Report - ${report.sprintName}`)}</dc:title>
+  <dc:subject>Sprint Report</dc:subject>
+  <dc:creator>Vindicta</dc:creator>
+  <cp:keywords>sprint,Vindicta,report</cp:keywords>
+  <dcterms:created xsi:type="dcterms:W3CDTF">${now}</dcterms:created>
+  <dcterms:modified xsi:type="dcterms:W3CDTF">${now}</dcterms:modified>
+</cp:coreProperties>`,
+    },
+    {
+      name: 'docProps/app.xml',
+      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
+  <Application>Vindicta</Application>
+  <Company>Vindicta</Company>
+</Properties>`,
+    },
+  ])
+}
+
+function pdfText(value: string) {
+  return value.replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)')
+}
+
+function wrapText(value: string, width = 86) {
+  const lines: string[] = []
+  for (const rawLine of value.split(/\r?\n/)) {
+    let line = rawLine.replace(/^#+\s*/, '').replace(/\*\*/g, '')
+    while (line.length > width) {
+      let split = line.lastIndexOf(' ', width)
+      if (split < 20) split = width
+      lines.push(line.slice(0, split))
+      line = line.slice(split).trim()
+    }
+    lines.push(line)
+  }
+  return lines
+}
+
+export function createVindictaSprintPdf(report: VindictaSprintDocReport) {
+  const contentLines = wrapText(report.markdown || `${report.sprintName}\nNo report content generated.`).slice(0, 180)
+  const pages: string[][] = []
+  for (let i = 0; i < contentLines.length; i += 42) pages.push(contentLines.slice(i, i + 42))
+  if (!pages.length) pages.push(['No report content generated.'])
+
+  const objects: string[] = []
+  objects.push('<< /Type /Catalog /Pages 2 0 R >>')
+  objects.push(`<< /Type /Pages /Kids [${pages.map((_, index) => `${3 + index * 2} 0 R`).join(' ')}] /Count ${pages.length} >>`)
+
+  pages.forEach((lines, index) => {
+    const pageObject = 3 + index * 2
+    const contentObject = pageObject + 1
+    objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> /F2 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >> >> >> /Contents ${contentObject} 0 R >>`)
+    const stream = [
+      'BT',
+      '/F2 16 Tf',
+      '72 740 Td',
+      `(${pdfText(index === 0 ? `Vindicta Sprint Report - ${report.sprintName}` : `${report.sprintName} continued`)}) Tj`,
+      '/F1 10 Tf',
+      '0 -24 Td',
+      ...lines.map(line => `(${pdfText(line)}) Tj 0 -15 Td`),
+      'ET',
+    ].join('\n')
+    objects.push(`<< /Length ${encoder.encode(stream).length} >>\nstream\n${stream}\nendstream`)
+  })
+
+  const chunks = ['%PDF-1.4\n']
+  const offsets: number[] = [0]
+  objects.forEach((object, index) => {
+    offsets.push(encoder.encode(chunks.join('')).length)
+    chunks.push(`${index + 1} 0 obj\n${object}\nendobj\n`)
+  })
+  const xrefOffset = encoder.encode(chunks.join('')).length
+  chunks.push(`xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`)
+  for (const offset of offsets.slice(1)) chunks.push(`${String(offset).padStart(10, '0')} 00000 n \n`)
+  chunks.push(`trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`)
+  return encoder.encode(chunks.join(''))
 }
