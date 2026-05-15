@@ -79,7 +79,10 @@ async function handleFinish() {
         <div class="space-y-5">
           <div>
             <p class="text-[10px] font-semibold uppercase tracking-[0.18em] text-indigo-300/70">Home</p>
-            <h1 class="mt-2 text-3xl font-bold tracking-tight text-[var(--text)]">Welcome back to Vindicta</h1>
+            <div class="mt-2 flex items-center gap-3">
+              <ProjectGuideOrb accent="#67e8f9" />
+              <h1 class="text-3xl font-bold tracking-tight text-[var(--text)]">Welcome back to Vindicta</h1>
+            </div>
             <p class="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--text-muted)]">
               Plan focused sprints, keep AI work scoped to the selected project, and turn local tooling into a calmer command center.
             </p>
@@ -100,18 +103,18 @@ async function handleFinish() {
           </div>
         </div>
 
-        <div class="rounded-xl border border-white/10 bg-black/15 p-4">
-          <div class="flex items-center justify-between gap-3">
+        <div class="relative overflow-hidden rounded-xl border border-white/10 bg-black/15 p-4">
+          <div class="relative flex items-center justify-between gap-3">
             <div>
               <p class="text-[10px] uppercase tracking-[0.14em] text-[var(--text-faint)]">Active Project</p>
               <p class="mt-1 truncate text-lg font-semibold text-[var(--text)]">{{ activeProject?.name ?? 'No project selected' }}</p>
             </div>
             <FolderOpen class="size-5 text-indigo-300" />
           </div>
-          <p class="mt-3 line-clamp-2 text-xs leading-relaxed text-[var(--text-muted)]">
+          <p class="relative mt-3 line-clamp-2 text-xs leading-relaxed text-[var(--text-muted)]">
             {{ activeProject?.absolutePath ?? 'Add or select a project from the sidebar to scope tools, queues, and analyzer results.' }}
           </p>
-          <div class="mt-4 grid grid-cols-2 gap-2">
+          <div class="relative mt-4 grid grid-cols-2 gap-2">
             <div class="rounded-lg border border-[var(--border)] bg-white/[0.03] px-3 py-2">
               <p class="text-[10px] uppercase tracking-wider text-[var(--text-faint)]">Code</p>
               <p class="mt-1 text-sm font-semibold text-[var(--text)]">{{ activeProject?.code ?? '-' }}</p>

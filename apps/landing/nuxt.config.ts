@@ -7,10 +7,10 @@ export default defineNuxtConfig({
   css: ['~/assets/css/main.css'],
   app: {
     head: {
-      title: 'Vindicta — Vibe-coded project management',
+      title: 'Vindicta - Local-first project management for AI-assisted work',
       meta: [
         { name: 'viewport', content: 'width=device-width, initial-scale=1' },
-        { name: 'description', content: 'Project management built for solo devs and small teams. Offline-first, no sign-up required.' },
+        { name: 'description', content: 'Vindicta is a free local desktop workflow for project tickets, kanban, sprint planning, and AI handovers.' },
       ],
     },
   },

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Sun, Moon, Database, ChevronDown, ChevronUp, Stethoscope, CheckCircle2, AlertTriangle, XCircle, Wrench, Loader2, FlaskConical, Terminal, Download } from 'lucide-vue-next'
+import { Sun, Moon, Database, ChevronDown, ChevronUp, Stethoscope, CheckCircle2, AlertTriangle, XCircle, Wrench, Loader2, Terminal, Download, Github, Heart } from 'lucide-vue-next'
 
 const app = useAppStore()
 const user = useUserStore()
@@ -314,38 +314,33 @@ async function resetAll() {
           </label>
         </div>
 
-        <div class="border-t border-[var(--border)] pt-4">
-          <div class="flex items-center gap-2 mb-3">
-            <FlaskConical class="size-3.5 text-violet-300" />
-            <p class="text-xs font-medium text-[var(--text-muted)] uppercase tracking-wider">Toast tests</p>
+      </div>
+    </div>
+
+    <!-- About -->
+    <div class="space-y-3">
+      <h3 class="text-[10px] font-semibold text-[var(--text-faint)] uppercase tracking-[0.12em]">About</h3>
+      <div class="p-4 rounded-xl bg-[var(--bg-card)] border border-[var(--border)] space-y-4">
+        <div class="flex items-start gap-3">
+          <div class="grid size-10 shrink-0 place-items-center rounded-xl border border-indigo-500/25 bg-indigo-500/10">
+            <Heart class="size-4 text-indigo-300" />
           </div>
-          <div class="grid grid-cols-2 gap-2">
-            <button
-              class="px-3 py-2 text-xs rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 hover:bg-indigo-500/20 transition-colors font-medium"
-              @click="notify('This is an info notification', 'info')"
-            >
-              Test Info
-            </button>
-            <button
-              class="px-3 py-2 text-xs rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 hover:bg-emerald-500/20 transition-colors font-medium"
-              @click="notify('Action completed successfully', 'success')"
-            >
-              Test Success
-            </button>
-            <button
-              class="px-3 py-2 text-xs rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-300 hover:bg-amber-500/20 transition-colors font-medium"
-              @click="notify('Something may need your attention', 'warning')"
-            >
-              Test Warning
-            </button>
-            <button
-              class="px-3 py-2 text-xs rounded-lg bg-red-500/10 border border-red-500/20 text-red-300 hover:bg-red-500/20 transition-colors font-medium"
-              @click="notify('An error occurred. Please try again.', 'error')"
-            >
-              Test Error
-            </button>
+          <div class="min-w-0">
+            <p class="text-sm font-semibold text-[var(--text)]">Made by Harold Eustaquio</p>
+            <p class="mt-1 text-xs leading-relaxed text-[var(--text-muted)]">
+              Vindicta is a local-first workspace for planning projects, shaping sprints, and keeping AI-assisted work grounded in the files you actually ship.
+            </p>
           </div>
         </div>
+        <a
+          href="https://github.com/Surelle-ha"
+          target="_blank"
+          rel="noreferrer"
+          class="inline-flex items-center gap-2 rounded-lg border border-[var(--border)] bg-black/10 px-3 py-2 text-xs font-medium text-[var(--text-muted)] transition-colors hover:bg-white/[0.05] hover:text-[var(--text)]"
+        >
+          <Github class="size-3.5" />
+          github.com/Surelle-ha
+        </a>
       </div>
     </div>
 

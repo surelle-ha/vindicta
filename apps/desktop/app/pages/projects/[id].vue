@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Bot, Clock3, FolderOpen, Info, KanbanSquare, ListTodo, Settings, Sparkles, Users } from 'lucide-vue-next'
+import { Activity, Bot, Clock3, FolderOpen, Info, KanbanSquare, ListTodo, PanelBottomOpen, Settings, Sparkles, Users } from 'lucide-vue-next'
 import type { Component } from 'vue'
 
 const route = useRoute()
@@ -10,6 +10,7 @@ const aiActivity = useAIActivityStore()
 
 const activeTab = ref<string>('info')
 const showAIToolPicker = ref(false)
+const headerCollapsed = ref(false)
 const projectId = computed(() => route.params.id as string)
 const project = computed(() => projectsStore.projects.find((p) => p.id === projectId.value))
 
@@ -64,6 +65,7 @@ const allTabs: { id: string; label: string; icon: Component; sprintOnly?: boolea
   { id: 'tickets',  label: 'Tickets', icon: ListTodo },
   { id: 'sprint',   label: 'Sprints', icon: Sparkles },
   { id: 'files',    label: 'Files', icon: FolderOpen },
+  { id: 'health',   label: 'Health Score', icon: Activity },
   { id: 'members',  label: 'Members', icon: Users },
   { id: 'history',  label: 'History', icon: Clock3 },
   { id: 'settings', label: 'Settings', icon: Settings },
@@ -115,14 +117,23 @@ watch(tabs, (visibleTabs) => {
         />
 
         <div class="relative z-10">
-          <ProjectHeader :project="project" @sprint-board="openSprintBoard" />
+          <Transition
+            enter-active-class="transition-all duration-200 ease-out"
+            enter-from-class="-translate-y-3 opacity-0"
+            enter-to-class="translate-y-0 opacity-100"
+            leave-active-class="transition-all duration-180 ease-in"
+            leave-from-class="translate-y-0 opacity-100"
+            leave-to-class="-translate-y-3 opacity-0"
+          >
+            <ProjectHeader v-if="!headerCollapsed" :project="project" @sprint-board="openSprintBoard" />
+          </Transition>
 
           <!-- Tab bar -->
-          <div class="flex items-center gap-0.5 mt-4 overflow-x-auto scrollbar-none">
+          <div class="flex items-center gap-0.5 overflow-x-auto scrollbar-none" :class="headerCollapsed ? 'mt-0' : 'mt-4'">
             <button
               v-for="tab in tabs"
               :key="tab.id"
-              class="px-3 py-2 text-xs font-medium transition-colors relative whitespace-nowrap flex items-center gap-1"
+              class="px-3 py-2 text-xs font-medium transition-colors relative whitespace-nowrap flex items-center gap-1 cursor-pointer"
               :class="activeTab === tab.id
                 ? tab.id === 'ai-workspace'
                   ? 'text-amber-200 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-px after:bg-amber-300'
@@ -135,6 +146,13 @@ watch(tabs, (visibleTabs) => {
               <component :is="tab.icon" class="size-3" />
               {{ tab.label }}
             </button>
+            <button
+              class="ml-auto grid size-8 shrink-0 place-items-center rounded-lg text-[var(--text-faint)] transition-colors hover:bg-white/[0.06] hover:text-[var(--text)] cursor-pointer"
+              :title="headerCollapsed ? 'Show project header' : 'Hide project header'"
+              @click="headerCollapsed = !headerCollapsed"
+            >
+              <PanelBottomOpen class="size-3.5" :class="headerCollapsed ? 'rotate-180' : ''" />
+            </button>
           </div>
         </div>
       </div>
@@ -146,6 +164,7 @@ watch(tabs, (visibleTabs) => {
         <AIWorkspacePanel v-else-if="activeTab === 'ai-workspace'" :project-id="project.id" />
         <ProjectInfo v-else-if="activeTab === 'info'" :project-path="project.absolutePath" />
         <ProjectFiles v-else-if="activeTab === 'files'" :project-path="project.absolutePath" />
+        <ProjectHealthScore v-else-if="activeTab === 'health'" :project-path="project.absolutePath" />
         <ProjectMembers v-else-if="activeTab === 'members'" :project-path="project.absolutePath" />
         <ProjectHistory v-else-if="activeTab === 'history'" :project-path="project.absolutePath" />
         <ProjectSettings v-else-if="activeTab === 'settings'" :project-path="project.absolutePath" />
@@ -154,7 +173,7 @@ watch(tabs, (visibleTabs) => {
       <!-- Ticket detail side panel (globally mounted) -->
       <TicketDetail />
 
-      <GlassModal v-model="showAIToolPicker" title="Choose AI Tool" max-width="sm">
+      <GlassModal v-model="showAIToolPicker" title="Choose AI Tool" max-width="sm" :closeable="false">
         <div class="space-y-4">
           <p class="text-sm text-[var(--text-muted)]">
             Choose the AI tool Vindicta should use for this project workspace.

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { AlertTriangle, Bot, CheckCircle2, ChevronLeft, ChevronRight, Clock3, FileDiff, Lightbulb, Loader2, Play, Terminal } from 'lucide-vue-next'
+import { AlertTriangle, Bot, CheckCircle2, ChevronLeft, ChevronRight, Clock3, FileCode, FileDiff, Lightbulb, Loader2, Play, Terminal } from 'lucide-vue-next'
 import { friendlyCodexExecError, runCodexExec } from '~/composables/useCodexShell'
 import type { Sprint, Ticket, TicketPriority, TicketStatus, TicketType } from '~/types/vindicta'
 import { renderMarkdown } from '~/utils/markdown'
@@ -52,6 +52,9 @@ const selectedTicketUpdate = computed(() =>
 )
 const openFindings = computed(() => selectedJob.value?.findings.filter(finding => finding.status === 'open') ?? [])
 const selectedFindings = computed(() => openFindings.value.filter(finding => finding.selected))
+const visibleChangedFiles = computed(() =>
+  [...new Set(selectedJob.value?.ticketUpdates.flatMap(update => update.changedFiles) ?? [])],
+)
 const eventPageSize = 6
 const eventPage = ref(1)
 const activityEvents = computed(() => selectedJob.value?.events.slice().reverse() ?? [])
@@ -71,6 +74,7 @@ const selectedJobReason = computed(() => {
 const workspaceTabs = computed(() => [
   { id: 'tickets' as const, label: 'Ticket Steps', icon: Bot, count: selectedSprintTickets.value.length },
   { id: 'activity' as const, label: 'Activity', icon: Loader2, count: activityEvents.value.length },
+  { id: 'code' as const, label: 'Code', icon: FileCode, count: visibleChangedFiles.value.length },
   { id: 'suggestions' as const, label: 'Backlog Suggestions', icon: Lightbulb, count: selectedJob.value?.findings.length ?? 0 },
   { id: 'report' as const, label: 'Report', icon: FileDiff, count: selectedJob.value?.output ? 1 : 0 },
 ])
@@ -607,7 +611,7 @@ async function resumeSelectedHandover() {
       </div>
 
       <div class="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-1">
-        <div class="grid gap-1 md:grid-cols-4">
+        <div class="grid gap-1 md:grid-cols-5">
           <button
             v-for="tab in workspaceTabs"
             :key="tab.id"
@@ -758,6 +762,30 @@ async function resumeSelectedHandover() {
           <Terminal class="mx-auto size-5 text-[var(--text-faint)]" />
           <p class="mt-2 text-xs text-[var(--text-muted)]">Activity will appear as the AI handover reports progress.</p>
         </div>
+      </section>
+
+      <section v-else-if="workspacePanelTab === 'code'" class="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-4">
+        <div class="flex items-center gap-2">
+          <FileCode class="size-3.5 text-sky-300" />
+          <h2 class="text-sm font-semibold text-[var(--text)]">Code Visibility</h2>
+        </div>
+        <p class="mt-2 text-xs leading-relaxed text-[var(--text-muted)]">
+          Private model thoughts are not exposed. This view shows observable code references, changed files reported by the AI, and the returned report when available.
+        </p>
+        <div v-if="visibleChangedFiles.length" class="mt-4 space-y-2">
+          <div
+            v-for="file in visibleChangedFiles"
+            :key="file"
+            class="rounded-lg border border-[var(--border)] bg-black/10 px-3 py-2 font-mono text-xs text-sky-200"
+          >
+            {{ file }}
+          </div>
+        </div>
+        <div v-else class="mt-4 rounded-lg border border-dashed border-[var(--border)] bg-black/10 px-3 py-8 text-center">
+          <FileCode class="mx-auto size-5 text-[var(--text-faint)]" />
+          <p class="mt-2 text-xs text-[var(--text-muted)]">Changed files will appear when Codex reports them.</p>
+        </div>
+        <pre v-if="selectedJob.output" class="mt-4 max-h-80 overflow-auto whitespace-pre-wrap rounded-lg border border-[var(--border)] bg-black/20 p-3 text-[11px] leading-relaxed text-[var(--text-muted)] custom-scroll">{{ selectedJob.output }}</pre>
       </section>
 
       <section v-else-if="workspacePanelTab === 'suggestions'" class="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-4">

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Check, ChevronDown, House, FolderKanban, UserCircle2, Settings, Sun, Moon, PanelLeftClose, PanelLeftOpen, Server, ShieldCheck } from 'lucide-vue-next'
+import { Check, ChevronDown, House, FolderKanban, UserCircle2, Settings, Sun, Moon, PanelLeftClose, PanelLeftOpen, Server, ShieldCheck, Map } from 'lucide-vue-next'
 
 const route = useRoute()
 const router = useRouter()
@@ -22,6 +22,7 @@ const projectToolItems = computed(() => [
     exact: false,
     disabled: !activeProject.value,
   },
+  { icon: Map, label: 'Roadmap', to: '/roadmap', exact: true, disabled: false },
   { icon: ShieldCheck, label: 'Security Analyzer', to: '/security', exact: true, disabled: false },
 ])
 

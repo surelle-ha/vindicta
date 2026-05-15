@@ -19,7 +19,7 @@ const tabs = [
     <button
       v-for="tab in tabs"
       :key="tab.id"
-      class="px-4 py-2 text-sm font-medium rounded-lg transition-all"
+      class="px-4 py-2 text-sm font-medium rounded-lg transition-all cursor-pointer"
       :class="[
         modelValue === tab.id
           ? 'bg-indigo-500/30 text-indigo-300 border border-indigo-500/30'

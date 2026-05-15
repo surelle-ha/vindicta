@@ -34,6 +34,11 @@ export const useSprintStore = defineStore('sprint', {
       }
       this.sprints.push(sprint)
       await this.persist()
+      await this.recordHistory('sprint:created', 'local', {
+        id: sprint.id,
+        name: sprint.name,
+        goal: sprint.goal,
+      })
       return sprint
     },
 
@@ -42,6 +47,10 @@ export const useSprintStore = defineStore('sprint', {
       if (!sprint) return
       sprint.status = 'active'
       await this.persist()
+      await this.recordHistory('sprint:started', 'local', {
+        id: sprint.id,
+        name: sprint.name,
+      })
     },
 
     async completeSprint(id: string, completedTicketIds?: string[]) {
@@ -50,6 +59,11 @@ export const useSprintStore = defineStore('sprint', {
       if (completedTicketIds) sprint.ticketIds = completedTicketIds
       sprint.status = 'completed'
       await this.persist()
+      await this.recordHistory('sprint:completed', 'local', {
+        id: sprint.id,
+        name: sprint.name,
+        completedTicketIds: completedTicketIds ?? sprint.ticketIds,
+      })
     },
 
     async assignTicket(ticketId: string, sprintId: string) {
@@ -57,6 +71,11 @@ export const useSprintStore = defineStore('sprint', {
       if (!sprint || sprint.ticketIds.includes(ticketId)) return
       sprint.ticketIds.push(ticketId)
       await this.persist()
+      await this.recordHistory('sprint:ticket_assigned', 'local', {
+        id: sprint.id,
+        name: sprint.name,
+        ticketId,
+      })
     },
 
     async removeTicket(ticketId: string, sprintId: string) {
@@ -64,6 +83,11 @@ export const useSprintStore = defineStore('sprint', {
       if (!sprint) return
       sprint.ticketIds = sprint.ticketIds.filter((id) => id !== ticketId)
       await this.persist()
+      await this.recordHistory('sprint:ticket_removed', 'local', {
+        id: sprint.id,
+        name: sprint.name,
+        ticketId,
+      })
     },
 
     async persist() {
@@ -71,6 +95,13 @@ export const useSprintStore = defineStore('sprint', {
       const { useVindictaJson } = await import('~/composables/useVindictaJson')
       const { patchSprints } = useVindictaJson()
       await patchSprints(this.projectPath, this.sprints)
+    },
+
+    async recordHistory(action: string, actor: string, payload: Record<string, unknown>) {
+      if (!this.projectPath) return
+      const { useVindictaJson } = await import('~/composables/useVindictaJson')
+      const { appendHistory } = useVindictaJson()
+      await appendHistory(this.projectPath, { action, actor, payload }).catch(() => {})
     },
   },
 })

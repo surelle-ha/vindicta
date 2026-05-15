@@ -3,7 +3,10 @@ export function nowISO(): string {
 }
 
 export function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-US', {
+  if (!iso) return 'Not scheduled'
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return 'Not scheduled'
+  return date.toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'short',
     day: 'numeric',

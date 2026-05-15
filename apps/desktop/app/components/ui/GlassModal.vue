@@ -1,8 +1,11 @@
 <script setup lang="ts">
-defineProps<{
+const props = withDefaults(defineProps<{
   title?: string
   maxWidth?: 'sm' | 'md' | 'lg' | 'xl'
-}>()
+  closeable?: boolean
+}>(), {
+  closeable: true,
+})
 
 const emit = defineEmits<{
   close: []
@@ -11,6 +14,7 @@ const emit = defineEmits<{
 const model = defineModel<boolean>()
 
 function close() {
+  if (model.value && props.closeable === false) return
   model.value = false
   emit('close')
 }
@@ -55,6 +59,7 @@ function close() {
             <div v-if="title" class="flex shrink-0 items-center justify-between gap-4 border-b border-white/10 px-4 pb-3 pt-4 sm:px-6 sm:pb-4 sm:pt-5">
               <h2 class="min-w-0 truncate text-base font-semibold text-white">{{ title }}</h2>
               <button
+                v-if="closeable"
                 class="flex size-8 shrink-0 items-center justify-center rounded-lg text-white/50 transition-colors hover:bg-white/10 hover:text-white"
                 @click="close"
               >

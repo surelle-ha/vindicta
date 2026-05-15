@@ -213,17 +213,24 @@ const scanStatusText = computed(() => {
 })
 
 onMounted(async () => {
+  await aiActivity.load()
   if (!projects.projects.length) {
     await projects.loadProjects()
   }
   await loadActiveProjectTickets()
   await loadScanHistory()
+  restoreActiveSecurityJob()
 })
 
 watch(() => activeProject.value?.absolutePath, () => {
   void loadActiveProjectTickets()
   void loadScanHistory()
+  restoreActiveSecurityJob()
 })
+
+watch(() => aiActivity.jobs, () => {
+  restoreActiveSecurityJob()
+}, { deep: true })
 
 onUnmounted(() => {
   stopScanActivityTimer()
@@ -315,6 +322,16 @@ async function recordScanHistory(partial: Pick<SecurityScanHistoryItem, 'summary
   scanHistory.value = [item, ...scanHistory.value].slice(0, 20)
   activeHistoryId.value = item.id
   await persistScanHistory()
+  const { appendHistory } = useVindictaJson()
+  await appendHistory(project.absolutePath, {
+    action: 'security:scan_completed',
+    actor: 'Codex',
+    payload: {
+      name: `Security scan - ${new Date(item.scannedAt).toLocaleString()}`,
+      findings: item.findings.length,
+      parseWarning: item.parseWarning,
+    },
+  }).catch(() => {})
 }
 
 function restoreHistoryItem(item: SecurityScanHistoryItem) {
@@ -348,6 +365,61 @@ function stopScanActivityTimer() {
   if (!scanActivityTimer) return
   clearInterval(scanActivityTimer)
   scanActivityTimer = null
+}
+
+function activityStatusForScan(status: string): ScanActivityStatus {
+  if (status === 'pending' || status === 'running' || status === 'done' || status === 'warning' || status === 'error') return status
+  return 'warning'
+}
+
+function startElapsedTimer(startedAt: string) {
+  stopScanActivityTimer()
+  scanElapsedSeconds.value = Math.max(0, Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000))
+  scanActivityTimer = setInterval(() => {
+    scanElapsedSeconds.value = Math.max(0, Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000))
+  }, 1000)
+}
+
+function restoreActiveSecurityJob() {
+  const project = activeProject.value
+  if (!project) return
+  const job = aiActivity.jobs.find(item =>
+    item.kind === 'security-scan'
+    && item.projectId === project.id
+    && (item.status === 'running' || item.status === 'pending')
+  )
+  if (!job) {
+    const finished = activeSecurityJobId
+      ? aiActivity.jobs.find(item => item.id === activeSecurityJobId)
+      : null
+    if (finished && finished.kind === 'security-scan' && finished.status !== 'running' && finished.status !== 'pending') {
+      aiScanRunning.value = false
+      stopScanActivityTimer()
+      scanReport.value = finished.output || scanReport.value
+      scanSummary.value = finished.summary || scanSummary.value
+      scanError.value = finished.status === 'error' ? finished.error || finished.summary : null
+      lastScanAt.value = finished.endedAt ?? lastScanAt.value
+    }
+    return
+  }
+
+  const shouldRestartTimer = activeSecurityJobId !== job.id
+  activeSecurityJobId = job.id
+  aiScanRunning.value = true
+  scanStartedAt.value = job.startedAt
+  scanError.value = null
+  parseWarning.value = null
+  scanActivity.value = job.events
+    .slice()
+    .reverse()
+    .map(event => ({
+      id: event.id,
+      label: event.label,
+      detail: event.detail,
+      status: activityStatusForScan(event.status),
+    }))
+  activeScanStage.value = Math.max(0, scanActivity.value.findIndex(item => item.status === 'running'))
+  if (shouldRestartTimer || !scanActivityTimer) startElapsedTimer(job.startedAt)
 }
 
 function setScanStage(index: number, status: ScanActivityStatus = 'running') {

@@ -8,7 +8,8 @@ const props = defineProps<{
 const history = ref<HistoryEntry[]>([])
 const loading = ref(true)
 
-onMounted(async () => {
+async function loadHistory() {
+  loading.value = true
   try {
     const { read } = useVindictaJson()
     const data = await read(props.projectPath)
@@ -20,16 +21,27 @@ onMounted(async () => {
   finally {
     loading.value = false
   }
-})
+}
+
+watch(() => props.projectPath, loadHistory, { immediate: true })
 
 const actionLabels: Record<string, string> = {
   'project:created': 'Created project',
+  'project:updated': 'Updated project',
+  'project:docs_updated': 'Updated project docs',
+  'project:health_checked': 'Ran engineering health check',
+  'project:data_reset': 'Reset project data',
   'ticket:created': 'Created ticket',
+  'ticket:updated': 'Updated ticket',
   'ticket:moved': 'Moved ticket',
+  'ticket:commented': 'Commented on ticket',
   'ticket:deleted': 'Deleted ticket',
   'sprint:created': 'Created sprint',
   'sprint:started': 'Started sprint',
   'sprint:completed': 'Completed sprint',
+  'sprint:ticket_assigned': 'Added ticket to sprint',
+  'sprint:ticket_removed': 'Removed ticket from sprint',
+  'security:scan_completed': 'Completed security scan',
 }
 </script>
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Folder, FolderOpen, FileText, FileCode, File, CheckCircle2, AlertTriangle, RefreshCw } from 'lucide-vue-next'
+import { Folder, FolderOpen, FileText, FileCode, File, CheckCircle2, AlertTriangle, RefreshCw, ExternalLink } from 'lucide-vue-next'
 
 const props = defineProps<{
   projectPath: string
@@ -20,6 +20,22 @@ const error = ref<string | null>(null)
 
 const AI_CONTEXT_FILES = ['CLAUDE.md', 'AGENT.md', '.cursorrules', 'AGENTS.md', '.clinerules']
 const detectedContextFiles = ref<string[]>([])
+
+function fileUrl(path: string) {
+  const normalized = path.replace(/\\/g, '/')
+  const withSlash = normalized.startsWith('/') ? normalized : `/${normalized}`
+  return `file://${encodeURI(withSlash)}`
+}
+
+async function openInExplorer() {
+  try {
+    const { open } = await import('@tauri-apps/plugin-shell')
+    await open(fileUrl(props.projectPath))
+  }
+  catch (e: any) {
+    error.value = e?.message ?? 'Could not open the project folder.'
+  }
+}
 
 async function load() {
   if (!props.projectPath) return
@@ -96,14 +112,23 @@ function fileIcon(name: string) {
     <!-- File tree header -->
     <div class="flex items-center justify-between">
       <p class="text-xs text-[var(--text-muted)]">{{ props.projectPath }}</p>
-      <button
-        class="flex items-center gap-1 text-[11px] text-[var(--text-faint)] hover:text-[var(--text)] transition-colors"
-        :class="loading ? 'animate-spin' : ''"
-        @click="load"
-      >
-        <RefreshCw class="size-3" :class="loading ? 'animate-spin' : ''" />
-        Refresh
-      </button>
+      <div class="flex items-center gap-2">
+        <button
+          class="flex items-center gap-1 text-[11px] text-[var(--text-faint)] hover:text-[var(--text)] transition-colors"
+          @click="openInExplorer"
+        >
+          <ExternalLink class="size-3" />
+          Open in Explorer
+        </button>
+        <button
+          class="flex items-center gap-1 text-[11px] text-[var(--text-faint)] hover:text-[var(--text)] transition-colors"
+          :class="loading ? 'animate-spin' : ''"
+          @click="load"
+        >
+          <RefreshCw class="size-3" :class="loading ? 'animate-spin' : ''" />
+          Refresh
+        </button>
+      </div>
     </div>
 
     <!-- Error state -->

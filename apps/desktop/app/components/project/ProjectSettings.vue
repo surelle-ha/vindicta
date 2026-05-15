@@ -6,7 +6,7 @@ import { generateId } from '~/utils/id'
 
 const props = defineProps<{ projectPath: string }>()
 
-const { read, patchSettings, patchMeta, resetProjectData } = useVindictaJson()
+const { read, patchSettings, patchMeta, appendHistory, resetProjectData } = useVindictaJson()
 const kanban = useKanbanStore()
 const sprintStore = useSprintStore()
 const projects = useProjectsStore()
@@ -14,6 +14,10 @@ const router = useRouter()
 const { notify } = useNotifications()
 
 const activeTab = ref<'general' | 'board' | 'roles' | 'danger'>('general')
+const visibleTabs = [
+  { id: 'general', label: 'General' },
+  { id: 'danger', label: 'Danger Zone' },
+]
 
 const project = computed(() => projects.activeProject)
 const aiToolNames: Record<AIToolSlug, string> = {
@@ -48,6 +52,11 @@ async function saveGeneral() {
   saving.value = true
   try {
     await patchMeta(props.projectPath, { name: nameDraft.value.trim(), description: descDraft.value })
+    await appendHistory(props.projectPath, {
+      action: 'project:updated',
+      actor: 'local',
+      payload: { name: nameDraft.value.trim() },
+    }).catch(() => {})
     await projects.updateProjectMeta(project.value.id, { name: nameDraft.value.trim(), description: descDraft.value })
     notify('Project settings saved', 'success')
   }
@@ -193,14 +202,9 @@ async function deleteFiles() {
     <!-- Tab nav -->
     <div class="flex items-center gap-1 border-b border-[var(--border)] pb-0">
       <button
-        v-for="tab in [
-          { id: 'general', label: 'General' },
-          { id: 'board', label: 'Board' },
-          { id: 'roles', label: 'Roles' },
-          { id: 'danger', label: 'Danger Zone' },
-        ]"
+        v-for="tab in visibleTabs"
         :key="tab.id"
-        class="px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px"
+        class="px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px cursor-pointer"
         :class="activeTab === tab.id
           ? (tab.id === 'danger' ? 'border-red-500 text-red-400' : 'border-indigo-500 text-white')
           : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text)]'"

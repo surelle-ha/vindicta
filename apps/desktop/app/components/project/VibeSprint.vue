@@ -31,6 +31,7 @@ const sprintReportMarkdown = ref('')
 const sprintReportTitle = ref('')
 const sprintReportSnapshot = ref<{ sprint: Sprint; tickets: Ticket[]; completed: Ticket[]; incomplete: Ticket[] } | null>(null)
 const exportingSprintReport = ref(false)
+const updatingProjectDocs = ref(false)
 const { saveFile } = useTauriDialog()
 
 function openTicketPicker(s: Sprint) {
@@ -44,6 +45,7 @@ const newSprintName = ref('')
 const newSprintGoal = ref('')
 const newStartDate = ref('')
 const newEndDate = ref('')
+const timedSprint = ref(false)
 const selectedExistingTicketIds = ref<string[]>([])
 
 // Step 2 — plan + clarifications
@@ -179,6 +181,10 @@ function toggleSprintTickets(id: string) {
 }
 
 function openAIHandover(s: Sprint) {
+  if (!ticketsForSprint(s).length) {
+    notify('Add at least one ticket before starting AI handover.', 'warning')
+    return
+  }
   handoverSprint.value = s
   selectedHandoverTool.value = 'codex'
   selectedHandoverEffort.value = 'medium'
@@ -461,7 +467,7 @@ const progressPercent = computed(() => {
 })
 
 const startsImmediately = computed(() => {
-  if (!newStartDate.value) return true
+  if (!timedSprint.value || !newStartDate.value) return false
   return new Date(newStartDate.value) <= new Date()
 })
 
@@ -486,6 +492,7 @@ function openCreate() {
   wizardStep.value = 1
   sprintPlanMarkdown.value = ''
   planPreviewMode.value = false
+  timedSprint.value = false
   selectedExistingTicketIds.value = []
   aiSuggestions.value = []
   aiAnalyzed.value = false
@@ -704,8 +711,8 @@ const priorityBadge: Record<string, string> = {
 }
 
 async function finishCreate(withTickets: boolean, includeExistingTickets = true) {
-  const startISO = newStartDate.value ? new Date(newStartDate.value).toISOString() : new Date().toISOString()
-  const endISO = newEndDate.value ? new Date(newEndDate.value).toISOString() : new Date(Date.now() + 14 * 86400000).toISOString()
+  const startISO = timedSprint.value && newStartDate.value ? new Date(newStartDate.value).toISOString() : ''
+  const endISO = timedSprint.value && newEndDate.value ? new Date(newEndDate.value).toISOString() : ''
 
   await sprint.createSprint({
     name: newSprintName.value || undefined,
@@ -716,7 +723,7 @@ async function finishCreate(withTickets: boolean, includeExistingTickets = true)
 
   const newSprint = sprint.sprints[sprint.sprints.length - 1]
   let autoStarted = false
-  if (newSprint && new Date(startISO) <= new Date()) {
+  if (newSprint && timedSprint.value && startISO && new Date(startISO) <= new Date()) {
     await sprint.startSprint(newSprint.id)
     autoStarted = true
   }
@@ -759,6 +766,7 @@ async function finishCreate(withTickets: boolean, includeExistingTickets = true)
   showCreate.value = false
   newSprintName.value = ''
   newSprintGoal.value = ''
+  timedSprint.value = false
   newStartDate.value = nowDateTimeLocal()
   newEndDate.value = twoWeeksDateTimeLocal()
   sprintPlanMarkdown.value = ''
@@ -773,8 +781,8 @@ function tryStartNow(sprintId: string) {
   const s = sprint.sprints.find(sp => sp.id === sprintId)
   if (!s) return
   if (s.ticketIds.length === 0) {
-    pendingStartId.value = sprintId
-    showNoTicketsWarning.value = true
+    notify('Add at least one ticket before starting this sprint.', 'warning')
+    return
   }
   else {
     confirmStartSprint(sprintId)
@@ -844,6 +852,124 @@ function buildSprintReportMarkdown(snapshot: { sprint: Sprint; tickets: Ticket[]
       : 'No incomplete tickets were returned to the backlog.',
   ]
   return lines.join('\n')
+}
+
+function projectFilePath(projectPath: string, fileName: string) {
+  const separator = projectPath.includes('\\') ? '\\' : '/'
+  return `${projectPath.replace(/[\\/]+$/, '')}${separator}${fileName}`
+}
+
+function sprintTicketLabel(ticket: Ticket) {
+  return projects.activeProject?.code && ticket.number
+    ? ticketKey(projects.activeProject.code, ticket.number)
+    : `#${ticket.number}`
+}
+
+function buildChangelogEntry(snapshot: { sprint: Sprint; tickets: Ticket[]; completed: Ticket[]; incomplete: Ticket[] }) {
+  const date = new Date().toISOString().slice(0, 10)
+  return [
+    `## ${date} - ${snapshot.sprint.name}`,
+    '',
+    snapshot.sprint.goal ? `Goal: ${snapshot.sprint.goal}` : 'Goal: No sprint goal was recorded.',
+    '',
+    '### Completed',
+    snapshot.completed.length
+      ? snapshot.completed.map(ticket => `- ${sprintTicketLabel(ticket)} ${ticket.title}`).join('\n')
+      : '- No tickets were marked done.',
+    '',
+    '### Returned to Backlog',
+    snapshot.incomplete.length
+      ? snapshot.incomplete.map(ticket => `- ${sprintTicketLabel(ticket)} ${ticket.title} (${ticket.status})`).join('\n')
+      : '- No incomplete tickets were returned.',
+    '',
+  ].join('\n')
+}
+
+function upsertChangelog(existing: string, entry: string) {
+  const trimmed = existing.trim()
+  if (!trimmed) return `# Changelog\n\n${entry}\n`
+  const lines = trimmed.split('\n')
+  if (/^#\s+changelog\s*$/i.test(lines[0] ?? '')) {
+    const body = lines.slice(1).join('\n').trim()
+    return body
+      ? `${lines[0]}\n\n${entry}\n\n${body}\n`
+      : `${lines[0]}\n\n${entry}\n`
+  }
+  return `# Changelog\n\n${entry}\n${trimmed}\n`
+}
+
+function buildReadmeSprintSection(snapshot: { sprint: Sprint; tickets: Ticket[]; completed: Ticket[]; incomplete: Ticket[] }) {
+  const date = new Date().toISOString().slice(0, 10)
+  const completed = snapshot.completed.length
+    ? snapshot.completed.map(ticket => `- ${sprintTicketLabel(ticket)} ${ticket.title}`).join('\n')
+    : '- No tickets were marked done.'
+  const returned = snapshot.incomplete.length
+    ? snapshot.incomplete.map(ticket => `- ${sprintTicketLabel(ticket)} ${ticket.title}`).join('\n')
+    : '- No incomplete tickets were returned.'
+
+  return [
+    '<!-- VINDICTA:SPRINT_SUMMARY_START -->',
+    '## Latest Sprint Summary',
+    '',
+    `**${snapshot.sprint.name}** updated on ${date}.`,
+    '',
+    snapshot.sprint.goal ? `Goal: ${snapshot.sprint.goal}` : 'Goal: No sprint goal was recorded.',
+    '',
+    '### Completed',
+    completed,
+    '',
+    '### Returned to Backlog',
+    returned,
+    '<!-- VINDICTA:SPRINT_SUMMARY_END -->',
+  ].join('\n')
+}
+
+function upsertReadmeSprintSection(existing: string, section: string) {
+  const trimmed = existing.trim()
+  if (!trimmed) {
+    return `# ${projects.activeProject?.name ?? 'Project'}\n\n${section}\n`
+  }
+  const pattern = /<!-- VINDICTA:SPRINT_SUMMARY_START -->[\s\S]*?<!-- VINDICTA:SPRINT_SUMMARY_END -->/
+  if (pattern.test(trimmed)) {
+    return `${trimmed.replace(pattern, section)}\n`
+  }
+  return `${trimmed}\n\n${section}\n`
+}
+
+async function updateProjectDocs() {
+  const snapshot = sprintReportSnapshot.value
+  const projectPath = projects.activeProject?.absolutePath
+  if (!snapshot || !projectPath) return
+
+  updatingProjectDocs.value = true
+  try {
+    const fs = useTauriFs()
+    const changelogPath = projectFilePath(projectPath, 'CHANGELOG.md')
+    const readmePath = projectFilePath(projectPath, 'README.md')
+    const existingChangelog = await fs.exists(changelogPath).catch(() => false)
+      ? await fs.readTextFile(changelogPath).catch(() => '')
+      : ''
+    const existingReadme = await fs.exists(readmePath).catch(() => false)
+      ? await fs.readTextFile(readmePath).catch(() => '')
+      : ''
+
+    await fs.writeTextFile(changelogPath, upsertChangelog(existingChangelog, buildChangelogEntry(snapshot)))
+    await fs.writeTextFile(readmePath, upsertReadmeSprintSection(existingReadme, buildReadmeSprintSection(snapshot)))
+    const { appendHistory } = useVindictaJson()
+    await appendHistory(projectPath, {
+      action: 'project:docs_updated',
+      actor: 'local',
+      payload: { name: snapshot.sprint.name, files: ['CHANGELOG.md', 'README.md'] },
+    }).catch(() => {})
+    notify('CHANGELOG.md and README.md updated.', 'success')
+    showReportPrompt.value = false
+  }
+  catch (e: any) {
+    notify(e?.message ?? 'Could not update project docs.', 'error')
+  }
+  finally {
+    updatingProjectDocs.value = false
+  }
 }
 
 function openEndSprintConfirm() {
@@ -962,13 +1088,17 @@ async function exportSprintReport(format: 'docx' | 'pdf') {
               <Target class="size-3.5" />
               {{ activeSprint.goal }}
             </p>
-            <p class="text-xs text-white/30 flex items-center gap-1.5 mt-1">
+            <p v-if="activeSprint.startDate || activeSprint.endDate" class="text-xs text-white/30 flex items-center gap-1.5 mt-1">
               <Calendar class="size-3" />
               {{ formatDate(activeSprint.startDate) }} → {{ formatDate(activeSprint.endDate) }}
             </p>
+            <p v-else class="text-xs text-white/30 flex items-center gap-1.5 mt-1">
+              <Calendar class="size-3" />
+              Untimed sprint
+            </p>
           </div>
           <div class="flex items-center gap-2">
-            <GlassButton variant="ghost" size="sm" :disabled="handoverRunning" @click="openAIHandover(activeSprint)">
+            <GlassButton v-if="activeTickets.length" variant="ghost" size="sm" :disabled="handoverRunning" @click="openAIHandover(activeSprint)">
               <Loader2 v-if="handoverRunning && handoverSprint?.id === activeSprint.id" class="size-3.5 animate-spin" />
               <Bot v-else class="size-3.5" />
               AI Handover
@@ -1049,17 +1179,16 @@ async function exportSprintReport(format: 'docx' | 'pdf') {
               <p v-if="s.goal" class="text-xs text-white/40 flex items-center gap-1 mt-0.5">
                 <Target class="size-3" />{{ s.goal }}
               </p>
-              <p class="text-xs text-white/30 flex items-center gap-1 mt-0.5">
+              <p v-if="s.startDate || s.endDate" class="text-xs text-white/30 flex items-center gap-1 mt-0.5">
                 <Calendar class="size-3" />
                 {{ formatDate(s.startDate) }} → {{ formatDate(s.endDate) }}
               </p>
+              <p v-else class="text-xs text-white/30 flex items-center gap-1 mt-0.5">
+                <Calendar class="size-3" />
+                Untimed sprint
+              </p>
             </div>
             <div class="flex items-center gap-2">
-              <GlassButton variant="ghost" size="sm" :disabled="handoverRunning" @click="openAIHandover(s)">
-                <Loader2 v-if="handoverRunning && handoverSprint?.id === s.id" class="size-3.5 animate-spin" />
-                <Bot v-else class="size-3.5" />
-                AI Handover
-              </GlassButton>
               <GlassButton variant="ghost" size="sm" @click="toggleSprintTickets(s.id)">
                 <component :is="isSprintExpanded(s.id) ? ChevronDown : ChevronRight" class="size-3.5" />
                 {{ s.ticketIds.length }} ticket{{ s.ticketIds.length !== 1 ? 's' : '' }}
@@ -1068,7 +1197,7 @@ async function exportSprintReport(format: 'docx' | 'pdf') {
                 <Plus class="size-3.5" />
                 Add tickets
               </GlassButton>
-              <GlassButton size="sm" @click="tryStartNow(s.id)">
+              <GlassButton size="sm" :disabled="!s.ticketIds.length" @click="tryStartNow(s.id)">
                 <Play class="size-3.5" />
                 Start Now
               </GlassButton>
@@ -1151,7 +1280,18 @@ async function exportSprintReport(format: 'docx' | 'pdf') {
       <div v-if="wizardStep === 1" class="space-y-4">
         <GlassInput v-model="newSprintName" label="Sprint name" placeholder="Vibe Sprint 1" />
         <GlassInput v-model="newSprintGoal" label="Sprint goal" placeholder="Ship the login and dashboard" />
-        <div class="grid grid-cols-2 gap-3">
+        <label class="flex items-start gap-3 rounded-lg border border-[var(--border)] bg-white/[0.03] px-3 py-2.5">
+          <input
+            v-model="timedSprint"
+            type="checkbox"
+            class="mt-0.5 size-4 rounded border-white/20 bg-black/20 accent-indigo-500"
+          >
+          <span>
+            <span class="block text-xs font-medium text-white/70">Timed Sprint</span>
+            <span class="mt-0.5 block text-xs leading-relaxed text-white/35">Show start and end dates when this sprint needs a schedule.</span>
+          </span>
+        </label>
+        <div v-if="timedSprint" class="grid grid-cols-2 gap-3">
           <div>
             <label class="block text-xs font-medium text-white/50 mb-1.5 uppercase tracking-wider">Start</label>
             <input
@@ -1608,21 +1748,29 @@ async function exportSprintReport(format: 'docx' | 'pdf') {
       </div>
     </GlassModal>
 
-    <GlassModal v-model="showReportPrompt" title="Generate Sprint Report?" max-width="sm">
+    <GlassModal v-model="showReportPrompt" title="Update Sprint Docs?" max-width="sm">
       <div class="space-y-4">
         <div class="flex items-start gap-3 rounded-lg border border-indigo-500/20 bg-indigo-500/10 px-3 py-2">
           <FileText class="mt-0.5 size-4 shrink-0 text-indigo-300" />
           <p class="text-sm leading-relaxed text-[var(--text-muted)]">
-            The sprint is complete. Generate a report with accomplished tickets, returned backlog items, and sprint summary?
+            The sprint is complete. Update CHANGELOG.md and README.md with completed tickets, returned backlog items, and the sprint summary?
           </p>
         </div>
         <div class="flex justify-end gap-2 border-t border-[var(--border)] pt-4">
           <button class="rounded-lg border border-[var(--border)] px-3 py-2 text-xs text-[var(--text-muted)] hover:text-[var(--text)]" @click="showReportPrompt = false">
             Not now
           </button>
-          <button class="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-medium text-white hover:bg-indigo-500" @click="openSprintReportPreview">
-            <FileText class="size-3.5" />
+          <button class="rounded-lg border border-[var(--border)] px-3 py-2 text-xs text-[var(--text-muted)] hover:text-[var(--text)]" @click="openSprintReportPreview">
             Preview Report
+          </button>
+          <button
+            class="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+            :disabled="updatingProjectDocs"
+            @click="updateProjectDocs"
+          >
+            <Loader2 v-if="updatingProjectDocs" class="size-3.5 animate-spin" />
+            <FileText class="size-3.5" />
+            Update Docs
           </button>
         </div>
       </div>
