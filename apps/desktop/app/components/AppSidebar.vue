@@ -15,12 +15,10 @@ import {
   PanelLeftClose,
   Plug,
   Radar,
-  Server,
   Settings,
   ShieldCheck,
   Sun,
   Swords,
-  Terminal,
   UserCircle2,
 } from 'lucide-vue-next'
 
@@ -30,11 +28,11 @@ const projects = useProjectsStore()
 const app = useAppStore()
 const collapsed = useState('sidebar-collapsed', () => false)
 const workspaceExpanded = useState('sidebar-workspace-expanded', () => true)
+const pentestExpanded = useState('sidebar-pentest-expanded', () => true)
 const projectSelectorOpen = ref(false)
 
 const navItems = [
   { icon: House,          label: 'Home',     to: '/',         exact: true },
-  { icon: Terminal,       label: 'Terminal', to: '/terminal', exact: true },
   { icon: UserCircle2,    label: 'Profile',  to: '/profile',  exact: true },
   { icon: GraduationCap,  label: 'Academy',  to: '/academy',  exact: true },
 ]
@@ -49,7 +47,6 @@ const workspaceTabs = [
   { id: 'secrets',       label: 'Secrets',       icon: KeyRound,       link: null as string | null },
   { id: 'reports',       label: 'Reports',       icon: FileText,       link: null as string | null },
   { id: 'history',       label: 'History',       icon: Clock3,         link: null as string | null },
-  { id: 'documents',     label: 'Documents',     icon: Files,          link: '/documents' },
   { id: 'settings',      label: 'Settings',      icon: Settings,       link: null as string | null },
 ]
 
@@ -57,18 +54,39 @@ const activeProject = computed(() => projects.activeProject)
 const isOnWorkspace = computed(() => activeProject.value && route.path.startsWith(`/projects/${activeProject.value.id}`))
 const activeTabFromRoute = computed(() => (route.query.tab as string) || 'overview')
 
+type ProjectToolItem = {
+  icon: any
+  label: string
+  to: string
+  exact?: boolean
+  disabled: boolean
+  children?: ProjectToolItem[]
+}
+
 // Only Pentest remains project-specific; MCP is now in the top nav
 const projectToolItems = computed(() => {
-  const items: { icon: any; label: string; to: string; exact: boolean; disabled: boolean }[] = []
+  const items: ProjectToolItem[] = []
   if (activeProject.value?.pentestEnabled) {
     items.push({
       icon: Swords,
       label: 'Pentest',
       to: '/pentest',
-      exact: true,
+      exact: false,
       disabled: false,
+      children: [
+        { icon: Swords, label: 'Red Team', to: '/pentest/red-team', exact: true, disabled: false },
+        { icon: ShieldCheck, label: 'Blue Team', to: '/pentest/blue-team', exact: true, disabled: false },
+        { icon: PackageSearch, label: 'Tools', to: '/pentest/tools', exact: true, disabled: false },
+      ],
     })
   }
+  items.push({
+    icon: Files,
+    label: 'Documents',
+    to: '/documents',
+    exact: true,
+    disabled: false,
+  })
   return items
 })
 
@@ -104,6 +122,14 @@ function projectToolLabel(project: typeof projects.projects[number]) {
   return project.activeAITool || project.aiTools?.[0] || project.aiTool || 'codex'
 }
 
+function isProjectToolExpanded(item: ProjectToolItem) {
+  return item.label === 'Pentest' ? pentestExpanded.value : true
+}
+
+function toggleProjectTool(item: ProjectToolItem) {
+  if (item.label === 'Pentest') pentestExpanded.value = !pentestExpanded.value
+}
+
 watch(() => route.fullPath, () => {
   projectSelectorOpen.value = false
 })
@@ -119,7 +145,7 @@ watch(() => route.fullPath, () => {
     <div class="h-11 px-3 flex items-center border-b border-[var(--border)]" :class="collapsed ? 'justify-center' : 'gap-2'">
       <template v-if="!collapsed">
         <img src="/icon.png" alt="" class="size-6 shrink-0 rounded-md object-cover" draggable="false">
-        <span class="flex-1 text-sm font-semibold text-[var(--text)] tracking-tight truncate opacity-80">Vindicta</span>
+        <span class="font-display flex-1 text-sm font-semibold text-[var(--text)] truncate opacity-90">Vindicta</span>
       </template>
       <button
         class="size-6 flex items-center justify-center rounded text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-white/[0.06] transition-colors shrink-0"
@@ -244,48 +270,54 @@ watch(() => route.fullPath, () => {
           </Transition>
         </div>
 
-        <!-- Other core items (Pentest — only if enabled on project) -->
-        <NuxtLink
+        <!-- Other core items (Pentest only if enabled on project) -->
+        <div
           v-for="item in projectToolItems"
           :key="item.to + item.label"
-          :to="item.to"
-          class="flex items-center gap-2 px-2 py-1.5 rounded-md text-xs transition-colors"
-          :class="[
-            collapsed ? 'justify-center' : '',
-            item.disabled ? 'pointer-events-none opacity-45' : '',
-            !item.disabled && isActive(item)
-              ? 'bg-indigo-600/15 text-indigo-400'
-              : 'text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-white/[0.05]',
-          ]"
-          :title="collapsed ? item.label : undefined"
         >
-          <component :is="item.icon" class="size-3.5 shrink-0 text-violet-400/70" />
-          <span v-if="!collapsed" class="truncate">{{ item.label }}</span>
-        </NuxtLink>
+          <div class="flex items-center gap-0.5">
+            <NuxtLink
+              :to="item.to"
+              class="flex flex-1 items-center gap-2 px-2 py-1.5 rounded-md text-xs transition-colors"
+              :class="[
+                collapsed ? 'justify-center' : '',
+                item.disabled ? 'pointer-events-none opacity-45' : '',
+                !item.disabled && isActive(item)
+                  ? 'bg-indigo-600/15 text-indigo-400'
+                  : 'text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-white/[0.05]',
+              ]"
+              :title="collapsed ? item.label : undefined"
+            >
+              <component :is="item.icon" class="size-3.5 shrink-0 text-violet-400/70" />
+              <span v-if="!collapsed" class="truncate">{{ item.label }}</span>
+            </NuxtLink>
+            <button
+              v-if="!collapsed && item.children?.length"
+              class="mr-1 flex size-5 shrink-0 items-center justify-center rounded text-[var(--text-faint)] transition-colors hover:bg-white/[0.06] hover:text-[var(--text)]"
+              :title="isProjectToolExpanded(item) ? 'Hide pentest pages' : 'Show pentest pages'"
+              @click.stop="toggleProjectTool(item)"
+            >
+              <ChevronDown class="size-3 transition-transform" :class="isProjectToolExpanded(item) ? '' : '-rotate-90'" />
+            </button>
+          </div>
+
+          <div v-if="!collapsed && item.children?.length && isProjectToolExpanded(item)" class="ml-3 mt-0.5 space-y-0.5 border-l border-[var(--border)] pl-2">
+            <NuxtLink
+              v-for="child in item.children"
+              :key="child.to"
+              :to="child.to"
+              class="flex items-center gap-2 px-2 py-1 rounded-md text-[11px] transition-colors"
+              :class="isActive(child)
+                ? 'bg-indigo-600/15 text-indigo-400'
+                : 'text-[var(--text-faint)] hover:text-[var(--text-muted)] hover:bg-white/[0.04]'"
+            >
+              <component :is="child.icon" class="size-3 shrink-0" />
+              <span class="truncate">{{ child.label }}</span>
+            </NuxtLink>
+          </div>
+        </div>
       </div>
 
-      <!-- Infrastructure section -->
-      <div class="pt-3">
-        <p v-if="!collapsed" class="px-2 mb-1 text-[10px] font-semibold text-[var(--text-faint)] uppercase tracking-[0.12em]">
-          Infrastructure
-        </p>
-        <div v-else class="h-px bg-[var(--border)] mx-1 mb-2" />
-
-        <NuxtLink
-          to="/server-hardening"
-          class="flex items-center gap-2 px-2 py-1.5 rounded-md text-xs transition-colors"
-          :class="[
-            collapsed ? 'justify-center' : '',
-            route.path === '/server-hardening'
-              ? 'bg-indigo-600/15 text-indigo-400'
-              : 'text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-white/[0.05]',
-          ]"
-          :title="collapsed ? 'Server Hardening' : undefined"
-        >
-          <Server class="size-3.5 shrink-0 text-emerald-400/70" />
-          <span v-if="!collapsed" class="truncate">Server Hardening</span>
-        </NuxtLink>
-      </div>
     </nav>
 
     <!-- Project selector -->

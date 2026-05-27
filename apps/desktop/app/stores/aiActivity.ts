@@ -1,6 +1,6 @@
 export type AIActivityKind = 'security-scan' | 'sprint-handover'
 export type AIActivityStatus = 'pending' | 'running' | 'done' | 'warning' | 'error' | 'interrupted'
-export type AIActivityTool = 'codex' | 'claude'
+export type AIActivityTool = 'codex' | 'claude' | 'openrouter'
 export type AIActivityEffort = 'low' | 'medium' | 'high' | 'xhigh'
 
 export interface AIActivityEvent {
@@ -280,7 +280,7 @@ function normalizeJobs(value: unknown): AIActivityJob[] {
       projectPath: job?.projectPath ? String(job.projectPath) : null,
       sprintId: job?.sprintId ? String(job.sprintId) : null,
       sprintName: job?.sprintName ? String(job.sprintName) : null,
-      tool: job?.tool === 'claude' ? 'claude' : 'codex',
+      tool: job?.tool === 'claude' ? 'claude' : job?.tool === 'openrouter' ? 'openrouter' : 'codex',
       effort: ['low', 'medium', 'high', 'xhigh'].includes(job?.effort) ? job.effort : 'medium',
       status: ['pending', 'running', 'done', 'warning', 'error', 'interrupted'].includes(job?.status) ? job.status : 'warning',
       startedAt: String(job?.startedAt ?? nowIso()),

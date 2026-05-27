@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Zap, Plus, Calendar, Target, Play, Wand2, Loader2, Eye, Edit3, AlertCircle, ChevronDown, ChevronRight, Bot, FileText, Download } from 'lucide-vue-next'
+import { Zap, Plus, Calendar, Target, Play, Wand2, Loader2, Eye, Edit3, AlertCircle, ChevronDown, ChevronRight, Bot, FileText, Download, Check } from 'lucide-vue-next'
 import type { Sprint, Ticket, TicketPriority, TicketStatus, TicketType } from '~/types/vindicta'
 import { ticketKey } from '~/utils/ticket'
 import { friendlyCodexExecError, runCodexExec } from '~/composables/useCodexShell'
@@ -1280,17 +1280,12 @@ async function exportSprintReport(format: 'docx' | 'pdf') {
       <div v-if="wizardStep === 1" class="space-y-4">
         <GlassInput v-model="newSprintName" label="Sprint name" placeholder="Vibe Sprint 1" />
         <GlassInput v-model="newSprintGoal" label="Sprint goal" placeholder="Ship the login and dashboard" />
-        <label class="flex items-start gap-3 rounded-lg border border-[var(--border)] bg-white/[0.03] px-3 py-2.5">
-          <input
-            v-model="timedSprint"
-            type="checkbox"
-            class="mt-0.5 size-4 rounded border-white/20 bg-black/20 accent-indigo-500"
-          >
+        <GlassCheckbox v-model="timedSprint" class="items-start rounded-lg border border-[var(--border)] bg-white/[0.03] px-3 py-2.5">
           <span>
             <span class="block text-xs font-medium text-white/70">Timed Sprint</span>
             <span class="mt-0.5 block text-xs leading-relaxed text-white/35">Show start and end dates when this sprint needs a schedule.</span>
           </span>
-        </label>
+        </GlassCheckbox>
         <div v-if="timedSprint" class="grid grid-cols-2 gap-3">
           <div>
             <label class="block text-xs font-medium text-white/50 mb-1.5 uppercase tracking-wider">Start</label>
@@ -1333,12 +1328,17 @@ async function exportSprintReport(format: 'docx' | 'pdf') {
                 : 'border-[var(--border)] bg-black/10 hover:bg-white/[0.05]'"
               @click="toggleExistingTicket(ticket.id)"
             >
-              <input
-                type="checkbox"
-                class="mt-0.5 size-4 shrink-0 rounded border-white/20 bg-black/20 accent-indigo-500"
-                :checked="selectedExistingTicketIds.includes(ticket.id)"
+              <span
+                role="checkbox"
+                tabindex="0"
+                :aria-checked="selectedExistingTicketIds.includes(ticket.id)"
+                class="mt-0.5 grid size-4 shrink-0 place-items-center rounded-md border transition-colors"
+                :class="selectedExistingTicketIds.includes(ticket.id) ? 'border-indigo-400 bg-indigo-500 text-white shadow-[0_0_14px_rgba(99,102,241,0.3)]' : 'border-white/15 bg-white/[0.04] text-transparent hover:border-indigo-400/50'"
                 @click.stop="toggleExistingTicket(ticket.id)"
+                @keydown.space.stop.prevent="toggleExistingTicket(ticket.id)"
               >
+                <Check class="size-3" stroke-width="3" />
+              </span>
               <div class="min-w-0 flex-1">
                 <div class="flex items-center gap-2">
                   <span v-if="projects.activeProject?.code && ticket.number" class="shrink-0 font-mono text-[10px] text-white/30">

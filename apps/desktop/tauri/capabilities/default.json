@@ -17,6 +17,15 @@
         { "name": "claude-cmd-version", "cmd": "claude.cmd", "args": ["--version"], "sidecar": false },
         { "name": "codex-version", "cmd": "codex", "args": ["--version"], "sidecar": false },
         { "name": "codex-cmd-version", "cmd": "codex.cmd", "args": ["--version"], "sidecar": false },
+        {
+          "name": "node-codex-version",
+          "cmd": "node",
+          "args": [
+            { "validator": "[^\\u0000-\\u001f\\u007f]+\\\\AppData\\\\Roaming\\\\npm\\\\node_modules\\\\@openai\\\\codex\\\\bin\\\\codex\\.js" },
+            "--version"
+          ],
+          "sidecar": false
+        },
         { "name": "codex-login-status", "cmd": "codex", "args": ["login", "status"], "sidecar": false },
         { "name": "codex-cmd-login-status", "cmd": "codex.cmd", "args": ["login", "status"], "sidecar": false },
         {

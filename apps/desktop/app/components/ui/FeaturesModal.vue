@@ -85,10 +85,9 @@ const features = [
       </div>
 
       <div class="flex items-center justify-between border-t border-[var(--border)] pt-4">
-        <label class="flex cursor-pointer items-center gap-2 text-xs text-[var(--text-muted)]">
-          <input v-model="dontShowAgain" type="checkbox" class="size-3.5 rounded accent-indigo-500">
+        <GlassCheckbox v-model="dontShowAgain" size="sm" class="text-xs text-[var(--text-muted)]">
           Don't show this again
-        </label>
+        </GlassCheckbox>
         <button
           class="rounded-lg bg-indigo-600 px-4 py-2 text-xs font-medium text-white hover:bg-indigo-500"
           @click="close"

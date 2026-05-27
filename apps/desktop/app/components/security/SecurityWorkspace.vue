@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   Bot,
   Bug,
+  Check,
   CheckCircle2,
   ChevronDown,
   ChevronUp,
@@ -26,6 +27,7 @@ import {
 } from 'lucide-vue-next'
 import { runCodexExec } from '~/composables/useCodexShell'
 import { runClaudeExec } from '~/composables/useClaudeAI'
+import { runOpenRouterChat } from '~/composables/useOpenRouterAI'
 import type {
   ProjectMeta,
   SecurityFinding,
@@ -37,7 +39,7 @@ import type {
 } from '~/types/vindicta'
 import { createVindictaSecurityDocx } from '~/utils/docx'
 
-type SecurityAITool = 'codex' | 'claude'
+type SecurityAITool = 'codex' | 'claude' | 'openrouter'
 type SecurityWorkspaceTab = 'overview' | 'scanner' | 'findings' | 'dependencies' | 'secrets' | 'reports' | 'history' | 'settings'
 type ScanActivityStatus = 'pending' | 'running' | 'done' | 'warning' | 'error'
 
@@ -78,6 +80,7 @@ const emit = defineEmits<{
 
 const security = useSecurityStore()
 const aiActivity = useAIActivityStore()
+const app = useAppStore()
 const { notify } = useNotifications()
 
 const query = ref('')
@@ -92,6 +95,13 @@ const showToolPicker = ref(false)
 const aiScanRunning = ref(false)
 const creatingRemediation = ref(false)
 const exportingDocs = ref(false)
+const confirmClearFindings = ref(false)
+
+async function clearAllFindingsConfirmed() {
+  await security.clearAllFindings()
+  confirmClearFindings.value = false
+  notify('All findings cleared.', 'success')
+}
 const dependencyLoading = ref(false)
 const secretsLoading = ref(false)
 const dependencyInventory = ref<DependencyInventoryItem[]>([])
@@ -105,11 +115,32 @@ let scanActivityTimer: ReturnType<typeof setInterval> | null = null
 let activeSecurityJobId: string | null = null
 let autoScanStartedForProject: string | null = null
 
+function securityToolLabel(tool: SecurityAITool) {
+  if (tool === 'claude') return 'Claude'
+  if (tool === 'openrouter') return 'OpenRouter'
+  return 'Codex'
+}
+
+function securityToolAccentClass(tool: SecurityAITool) {
+  if (tool === 'claude') return 'text-violet-300'
+  if (tool === 'openrouter') return 'text-sky-300'
+  return 'text-emerald-300'
+}
+
+function securityToolRunButtonClass(tool: SecurityAITool) {
+  if (tool === 'claude') return 'bg-violet-600 hover:bg-violet-500'
+  if (tool === 'openrouter') return 'bg-sky-600 hover:bg-sky-500'
+  return 'bg-emerald-600 hover:bg-emerald-500'
+}
+
 function buildScanStageTemplates(tool: SecurityAITool) {
-  const toolLabel = tool === 'claude' ? 'Claude' : 'Codex'
+  const toolLabel = securityToolLabel(tool)
+  const launchDetail = tool === 'openrouter'
+    ? `Sending the read-only security prompt to the configured ${toolLabel} model.`
+    : `Launching ${toolLabel} CLI in read-only mode for the selected project.`
   return [
     { id: 'scope', label: 'Preparing scan scope', detail: 'Building a read-only security prompt for OWASP, configuration, dependency, secret, API, and Tauri review.' },
-    { id: 'launch', label: `Starting ${toolLabel}`, detail: `Launching ${toolLabel} CLI in read-only mode for the selected project.` },
+    { id: 'launch', label: `Starting ${toolLabel}`, detail: launchDetail },
     { id: 'inspect', label: 'Inspecting project files', detail: 'Reviewing source, configuration, auth boundaries, shell usage, data access, and local trust boundaries.' },
     { id: 'risk-map', label: 'Mapping risks', detail: 'Grouping concrete issues by severity, abuse path, evidence, and risk family.' },
     { id: 'parse', label: 'Parsing results', detail: `Converting the ${toolLabel} report into selectable remediation-ready security findings.` },
@@ -167,11 +198,13 @@ const scanActivityClasses: Record<ScanActivityStatus, string> = {
 const statusOptions: SecurityFindingStatus[] = ['open', 'triaged', 'in_progress', 'resolved', 'ignored']
 const selectedEffortOption = computed(() => scanEffortOptions.find(option => option.value === selectedScanEffort.value) ?? scanEffortOptions[1]!)
 const normalizedFindingLimit = computed(() => Math.max(0, Math.min(50, Math.floor(Number(selectedFindingLimit.value) || 0))))
+const selectedAIToolLabel = computed(() => securityToolLabel(selectedAITool.value))
+const canUseSelectedAITool = computed(() => selectedAITool.value !== 'openrouter' || (app.openRouter.enabled && Boolean(app.openRouter.apiKey.trim())))
 const latestScan = computed(() => security.latestScan)
 const activeScan = computed(() => security.scans.find(scan => scan.id === activeScanId.value) ?? latestScan.value)
 const scanFindings = computed(() => activeScan.value?.findings ?? [])
 const selectedScanFindings = computed(() => scanFindings.value.filter(finding => finding.selected))
-const canRunAIScan = computed(() => Boolean(props.project.absolutePath) && !aiScanRunning.value)
+const canRunAIScan = computed(() => Boolean(props.project.absolutePath) && !aiScanRunning.value && canUseSelectedAITool.value)
 const canExportDocs = computed(() => Boolean(activeScan.value || security.findings.length) && !exportingDocs.value)
 const formattedLastScan = computed(() => latestScan.value ? new Date(latestScan.value.scannedAt).toLocaleString() : 'Not run')
 const highRiskScans = computed(() => scanFindings.value.filter(finding => finding.severity === 'critical' || finding.severity === 'high').length)
@@ -554,10 +587,16 @@ async function runAIScan(effortOverride?: SecurityScanEffort, automatic = false)
     return
   }
 
-  const tool = automatic ? (props.project.activeAITool === 'claude' ? 'claude' : 'codex') : selectedAITool.value
+  const tool: SecurityAITool = automatic ? (props.project.activeAITool === 'claude_code' ? 'claude' : 'codex') : selectedAITool.value
   const effort = scanEffortOptions.find(option => option.value === (effortOverride ?? selectedEffortOption.value.value)) ?? scanEffortOptions[1]!
   const findingLimit = automatic ? security.settings.aiFindingLimit : normalizedFindingLimit.value
-  const toolLabel = tool === 'claude' ? 'Claude' : 'Codex'
+  const toolLabel = securityToolLabel(tool)
+
+  if (tool === 'openrouter' && (!app.openRouter.enabled || !app.openRouter.apiKey.trim())) {
+    notify('Configure and enable OpenRouter in AI Models before running this scan.', 'warning')
+    showToolPicker.value = true
+    return
+  }
 
   if (!automatic) {
     selectedFindingLimit.value = findingLimit
@@ -574,7 +613,21 @@ async function runAIScan(effortOverride?: SecurityScanEffort, automatic = false)
     const prompt = buildSecurityScanPrompt(props.project.name, buildExistingSecurityContext(), effort, findingLimit)
 
     let result: { stdout: string; stderr: string }
-    if (tool === 'claude') {
+    if (tool === 'openrouter') {
+      const output = await runOpenRouterChat({
+        apiKey: app.openRouter.apiKey,
+        model: app.openRouter.model,
+        messages: [
+          {
+            role: 'system',
+            content: 'You are Vindicta, an AI security reviewer. Return only the JSON requested by the user.',
+          },
+          { role: 'user', content: prompt },
+        ],
+      })
+      result = { stdout: output, stderr: '' }
+    }
+    else if (tool === 'claude') {
       result = await runClaudeExec({
         projectPath: props.project.absolutePath,
         prompt,
@@ -1183,7 +1236,17 @@ async function clearScanHistory() {
             <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <NuxtLink :to="scanFindingRoute(finding)" class="min-w-0 rounded-lg outline-none transition-colors hover:bg-white/[0.03] focus-visible:ring-2 focus-visible:ring-indigo-500/40">
                 <div class="flex flex-wrap items-center gap-2">
-                  <input v-model="finding.selected" type="checkbox" class="size-3.5 rounded border-white/20 bg-black/20 accent-indigo-500" @click.stop>
+                  <span
+                    role="checkbox"
+                    tabindex="0"
+                    :aria-checked="finding.selected"
+                    class="grid size-4 shrink-0 place-items-center rounded-md border transition-colors"
+                    :class="finding.selected ? 'border-indigo-400 bg-indigo-500 text-white shadow-[0_0_14px_rgba(99,102,241,0.3)]' : 'border-white/15 bg-white/[0.04] text-transparent hover:border-indigo-400/50'"
+                    @click.stop.prevent="finding.selected = !finding.selected"
+                    @keydown.space.stop.prevent="finding.selected = !finding.selected"
+                  >
+                    <Check class="size-3" stroke-width="3" />
+                  </span>
                   <span class="font-mono text-[10px] text-[var(--text-faint)]">{{ finding.id }}</span>
                   <span class="rounded-full border px-2 py-0.5 text-[10px] font-medium capitalize" :class="severityClasses[finding.severity]">{{ finding.severity }}</span>
                   <span class="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] font-medium text-[var(--text-muted)]">{{ finding.category }}</span>
@@ -1240,10 +1303,10 @@ async function clearScanHistory() {
             <h2 class="text-sm font-semibold text-[var(--text)]">Scan Modules</h2>
           </div>
           <div class="mt-3 space-y-2">
-            <div class="flex items-center justify-between rounded-lg border border-[var(--border)] bg-black/10 px-3 py-2"><span class="text-xs text-[var(--text-muted)]">AI Code Review</span><span class="text-[10px]" :class="selectedAITool === 'claude' ? 'text-violet-300' : 'text-emerald-300'">{{ selectedAITool === 'claude' ? 'Claude' : 'Codex' }}</span></div>
+            <div class="flex items-center justify-between rounded-lg border border-[var(--border)] bg-black/10 px-3 py-2"><span class="text-xs text-[var(--text-muted)]">AI Code Review</span><span class="text-[10px]" :class="securityToolAccentClass(selectedAITool)">{{ selectedAIToolLabel }}</span></div>
             <div class="flex items-center justify-between rounded-lg border border-[var(--border)] bg-black/10 px-3 py-2"><span class="text-xs text-[var(--text-muted)]">Effort</span><span class="text-[10px] text-indigo-300">{{ selectedEffortOption.label }}</span></div>
             <div class="flex items-center justify-between rounded-lg border border-[var(--border)] bg-black/10 px-3 py-2"><span class="text-xs text-[var(--text-muted)]">OWASP Mapping</span><span class="text-[10px]" :class="latestScan ? 'text-emerald-300' : 'text-[var(--text-faint)]'">{{ latestScan ? 'Done' : 'Pending' }}</span></div>
-            <div class="flex items-center justify-between rounded-lg border border-[var(--border)] bg-black/10 px-3 py-2"><span class="text-xs text-[var(--text-muted)]">Claude Scan</span><span class="text-[10px] text-emerald-300">Available</span></div>
+            <div class="flex items-center justify-between rounded-lg border border-[var(--border)] bg-black/10 px-3 py-2"><span class="text-xs text-[var(--text-muted)]">OpenRouter Scan</span><span class="text-[10px]" :class="app.openRouter.enabled && app.openRouter.apiKey ? 'text-emerald-300' : 'text-[var(--text-faint)]'">{{ app.openRouter.enabled && app.openRouter.apiKey ? 'Available' : 'Configure' }}</span></div>
           </div>
         </section>
         <section class="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-4">
@@ -1411,13 +1474,22 @@ async function clearScanHistory() {
         <h2 class="text-sm font-semibold text-[var(--text)]">Security Settings</h2>
       </div>
       <div class="mt-4 grid gap-4 md:grid-cols-3">
-        <label class="rounded-lg border border-[var(--border)] bg-black/10 p-4">
+        <div class="rounded-lg border border-[var(--border)] bg-black/10 p-4">
           <span class="text-xs font-medium text-[var(--text)]">Automatic scan</span>
-          <span class="mt-2 flex items-center gap-2 text-xs text-[var(--text-muted)]">
-            <input :checked="security.settings.autoScanEnabled" type="checkbox" class="size-3.5 accent-indigo-500" @change="security.updateSettings({ autoScanEnabled: ($event.target as HTMLInputElement).checked })">
+          <button
+            type="button"
+            class="mt-2 flex items-center gap-2 text-left text-xs text-[var(--text-muted)]"
+            @click="security.updateSettings({ autoScanEnabled: !security.settings.autoScanEnabled })"
+          >
+            <span
+              class="grid size-4 shrink-0 place-items-center rounded-md border transition-colors"
+              :class="security.settings.autoScanEnabled ? 'border-indigo-400 bg-indigo-500 text-white shadow-[0_0_14px_rgba(99,102,241,0.3)]' : 'border-white/15 bg-white/[0.04] text-transparent hover:border-indigo-400/50'"
+            >
+              <Check class="size-3" stroke-width="3" />
+            </span>
             Run quick scan when stale
-          </span>
-        </label>
+          </button>
+        </div>
         <label class="rounded-lg border border-[var(--border)] bg-black/10 p-4">
           <span class="text-xs font-medium text-[var(--text)]">Stale after hours</span>
           <input :value="security.settings.autoScanStaleHours" type="number" min="1" class="mt-2 h-9 w-full rounded-lg border border-[var(--border)] bg-black/20 px-2 text-xs text-[var(--text)] outline-none" @change="security.updateSettings({ autoScanStaleHours: Number(($event.target as HTMLInputElement).value) || 24 })">
@@ -1436,6 +1508,63 @@ async function clearScanHistory() {
           <span class="mt-2 block text-[10px] leading-relaxed text-[var(--text-faint)]">Use 0 to remove the explicit cap from the AI prompt. Manual scans can override this in the run modal.</span>
         </label>
       </div>
+
+      <!-- Danger zone -->
+      <div class="mt-5 rounded-xl border border-red-500/20 bg-red-500/[0.04] p-4 space-y-3">
+        <p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-red-400/70">Danger Zone</p>
+
+        <div class="flex items-center justify-between gap-4 rounded-lg border border-red-500/10 bg-black/10 px-4 py-3">
+          <div class="min-w-0">
+            <p class="text-xs font-semibold text-[var(--text)]">Reset All Findings</p>
+            <p class="mt-0.5 text-[11px] leading-relaxed text-[var(--text-muted)]">
+              Permanently deletes all {{ security.findings.length }} finding{{ security.findings.length === 1 ? '' : 's' }} for this project. Scans and settings are kept.
+            </p>
+          </div>
+          <div class="flex shrink-0 items-center gap-2">
+            <Transition
+              enter-active-class="transition-all duration-150"
+              enter-from-class="opacity-0 translate-x-2"
+              enter-to-class="opacity-100 translate-x-0"
+            >
+              <GlassCheckbox
+                v-if="confirmClearFindings"
+                v-model="confirmClearFindings"
+                size="sm"
+                class="text-[11px] text-red-200"
+              >
+                Confirm
+              </GlassCheckbox>
+            </Transition>
+            <GlassButton
+              size="sm"
+              :class="confirmClearFindings
+                ? 'border-red-500/40 bg-red-500/20 text-red-300 hover:bg-red-500/30'
+                : 'border-red-500/25 bg-red-500/10 text-red-300 hover:bg-red-500/15'"
+              :disabled="security.findings.length === 0"
+              @click="confirmClearFindings ? clearAllFindingsConfirmed() : (confirmClearFindings = true)"
+            >
+              <Trash2 class="size-3.5" />
+              {{ confirmClearFindings ? 'Yes, delete all' : 'Reset findings' }}
+            </GlassButton>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between gap-4 rounded-lg border border-red-500/10 bg-black/10 px-4 py-3">
+          <div class="min-w-0">
+            <p class="text-xs font-semibold text-[var(--text)]">Clear Scan History</p>
+            <p class="mt-0.5 text-[11px] leading-relaxed text-[var(--text-muted)]">Removes all past scan records. Findings are not affected.</p>
+          </div>
+          <GlassButton
+            size="sm"
+            class="shrink-0 border-red-500/25 bg-red-500/10 text-red-300 hover:bg-red-500/15"
+            :disabled="security.scans.length === 0"
+            @click="security.clearScans(); notify('Scan history cleared.', 'success')"
+          >
+            <Trash2 class="size-3.5" />
+            Clear history
+          </GlassButton>
+        </div>
+      </div>
     </section>
 
     <GlassModal v-model="showToolPicker" title="Run AI Scan" max-width="md">
@@ -1445,15 +1574,31 @@ async function clearScanHistory() {
           <button class="flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left transition-colors" :class="selectedAITool === 'codex' ? 'border-emerald-500/30 bg-emerald-500/10' : 'border-[var(--border)] bg-black/10 hover:bg-white/[0.05]'" @click="selectedAITool = 'codex'">
             <div class="grid size-9 place-items-center rounded-lg border border-emerald-500/30 bg-emerald-500/15 text-sm font-semibold text-emerald-200">C</div>
             <div class="min-w-0">
-              <p class="text-sm font-semibold text-[var(--text)]">Codex</p>
+              <div class="flex flex-wrap items-center gap-2">
+                <p class="text-sm font-semibold text-[var(--text)]">Codex</p>
+                <span class="rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-widest text-emerald-300">Suggested</span>
+              </div>
               <p class="mt-0.5 text-xs text-[var(--text-muted)]">Runs a read-only security review with the local Codex CLI.</p>
             </div>
           </button>
           <button class="flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left transition-colors" :class="selectedAITool === 'claude' ? 'border-violet-500/30 bg-violet-500/10' : 'border-[var(--border)] bg-black/10 hover:bg-white/[0.05]'" @click="selectedAITool = 'claude'">
             <div class="grid size-9 place-items-center rounded-lg border border-violet-500/30 bg-violet-500/15 text-sm font-semibold text-violet-200">Cl</div>
             <div class="min-w-0">
-              <p class="text-sm font-semibold text-[var(--text)]">Claude</p>
+              <div class="flex flex-wrap items-center gap-2">
+                <p class="text-sm font-semibold text-[var(--text)]">Claude</p>
+                <span class="rounded-full border border-violet-500/25 bg-violet-500/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-widest text-violet-300">Suggested</span>
+              </div>
               <p class="mt-0.5 text-xs text-[var(--text-muted)]">Runs a read-only security review with the local Claude CLI.</p>
+            </div>
+          </button>
+          <button class="flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left transition-colors" :class="selectedAITool === 'openrouter' ? 'border-sky-500/30 bg-sky-500/10' : 'border-[var(--border)] bg-black/10 hover:bg-white/[0.05]'" @click="selectedAITool = 'openrouter'">
+            <div class="grid size-9 place-items-center rounded-lg border border-sky-500/30 bg-sky-500/15 text-sm font-semibold text-sky-200">OR</div>
+            <div class="min-w-0">
+              <p class="text-sm font-semibold text-[var(--text)]">OpenRouter</p>
+              <p class="mt-0.5 text-xs text-[var(--text-muted)]">Runs this review with the configured OpenRouter API model.</p>
+              <p class="mt-1 text-[10px]" :class="app.openRouter.enabled && app.openRouter.apiKey ? 'text-sky-300' : 'text-amber-300'">
+                {{ app.openRouter.enabled && app.openRouter.apiKey ? app.openRouter.model : 'Configure API key in AI Models' }}
+              </p>
             </div>
           </button>
         </div>
@@ -1477,9 +1622,9 @@ async function clearScanHistory() {
         </label>
         <div class="flex justify-end gap-2 border-t border-[var(--border)] pt-4">
           <button class="rounded-lg border border-[var(--border)] px-3 py-2 text-xs font-medium text-[var(--text-muted)] hover:text-[var(--text)]" @click="showToolPicker = false">Cancel</button>
-          <button class="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-50" :class="selectedAITool === 'claude' ? 'bg-violet-600 hover:bg-violet-500' : 'bg-emerald-600 hover:bg-emerald-500'" :disabled="!canRunAIScan" @click="runAIScan()">
+          <button class="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-50" :class="securityToolRunButtonClass(selectedAITool)" :disabled="!canRunAIScan" @click="runAIScan()">
             <Bot class="size-3.5" />
-            Run {{ selectedEffortOption.label }} Scan with {{ selectedAITool === 'claude' ? 'Claude' : 'Codex' }}
+            Run {{ selectedEffortOption.label }} Scan with {{ selectedAIToolLabel }}
           </button>
         </div>
       </div>

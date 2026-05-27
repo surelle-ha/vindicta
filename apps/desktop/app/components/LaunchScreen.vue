@@ -65,15 +65,15 @@ function onKey(e: KeyboardEvent) {
         class="z-0"
         :wave-speed="0.035"
         :wave-frequency="2.6"
-        :wave-amplitude="0.38"
-        :wave-color="[0.34, 0.36, 0.9]"
-        :color-num="5"
+        :wave-amplitude="0.26"
+        :wave-color="[0.42, 0.37, 0.62]"
+        :color-num="4"
         :pixel-size="2"
         :disable-animation="false"
-        :enable-mouse-interaction="true"
+        :enable-mouse-interaction="false"
         :mouse-radius="0.85"
       />
-      <div class="absolute inset-0 z-[1] pointer-events-none bg-[radial-gradient(circle_at_center,transparent_0%,rgba(13,13,15,0.22)_42%,rgba(13,13,15,0.82)_100%)]" />
+      <div class="absolute inset-0 z-[1] pointer-events-none bg-[radial-gradient(circle_at_center,rgba(31,29,38,0.08)_0%,rgba(13,13,15,0.34)_46%,rgba(13,13,15,0.86)_100%)]" />
       <div class="absolute inset-0 z-[2] pointer-events-none bg-black/35" />
 
       <Transition leave-active-class="transition-[opacity,transform] duration-350 ease-in"
@@ -89,7 +89,8 @@ function onKey(e: KeyboardEvent) {
                   class="mx-auto size-24 select-none rounded-2xl object-cover drop-shadow-2xl"
                   draggable="false"
                 >
-                <div class="mt-5">
+                <h1 class="mt-4 text-2xl font-bold tracking-tight text-white/90">Vindicta</h1>
+                <div class="mt-3">
                   <p class="text-sm text-white/30 tracking-wide">Your local security companion</p>
                   <TextType :text="launchMessages" class-name="mt-3 min-h-5 text-sm font-medium text-indigo-100/55"
                     :typing-speed="42" :deleting-speed="22" :pause-duration="1800" :show-cursor="true" cursor-character="|"
@@ -105,6 +106,9 @@ function onKey(e: KeyboardEvent) {
                 @click="enter">
                 Enter Vindicta
               </button>
+              <p class="max-w-lg text-center text-[10px] leading-relaxed text-white/25">
+                By entering and using Vindicta, you accept responsibility for your actions. The developers of Vindicta and the bundled or integrated tools are not liable for damage, misuse, or unauthorized activity.
+              </p>
             </div>
           </div>
 

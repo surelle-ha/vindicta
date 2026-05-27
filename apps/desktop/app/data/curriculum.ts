@@ -1,4 +1,4 @@
-// 30-Day Security Engineering Bootcamp curriculum
+// Security Engineering Academy curriculum
 // Exported as static data to avoid Vue SFC template-literal parsing issues.
 
 export interface Lesson {
@@ -22,16 +22,251 @@ export interface Week {
 }
 
 export const WEEKS: Week[] = [
+  { number: 0, title: 'Introduction', theme: 'Getting Started',     color: 'text-teal-300',   bg: 'bg-teal-500/10',   border: 'border-teal-500/20'   },
   { number: 1, title: 'Week 1', theme: 'Security Foundations', color: 'text-indigo-300', bg: 'bg-indigo-500/10', border: 'border-indigo-500/20' },
   { number: 2, title: 'Week 2', theme: 'Web App Security',     color: 'text-violet-300', bg: 'bg-violet-500/10', border: 'border-violet-500/20' },
   { number: 3, title: 'Week 3', theme: 'Penetration Testing',  color: 'text-rose-300',   bg: 'bg-rose-500/10',   border: 'border-rose-500/20'   },
   { number: 4, title: 'Week 4', theme: 'Defensive Security',   color: 'text-emerald-300',bg: 'bg-emerald-500/10',border: 'border-emerald-500/20' },
   { number: 5, title: 'Capstone', theme: 'Assessment',         color: 'text-amber-300',  bg: 'bg-amber-500/10',  border: 'border-amber-500/20'  },
+  { number: 6, title: 'Specialization', theme: 'Advanced AppSec', color: 'text-cyan-300', bg: 'bg-cyan-500/10', border: 'border-cyan-500/20' },
+  { number: 7, title: 'Operations', theme: 'Blue Team Practice', color: 'text-sky-300', bg: 'bg-sky-500/10', border: 'border-sky-500/20' },
 ]
 
-export const TOTAL_DAYS = 30
+export const TOTAL_DAYS = 40
+
+export const INTRO_LESSON_IDS = ['intro-1', 'intro-2', 'intro-3', 'intro-4']
 
 export const LESSONS: Lesson[] = [
+  // ── Introduction: Getting Started ────────────────────────────────────────
+  {
+    id: 'intro-1', day: 1, week: 0,
+    title: 'Welcome to Vindicta Academy',
+    duration: '10 min',
+    objectives: [
+      'Understand what Vindicta Academy is and how the bootcamp is structured',
+      'Navigate the course grid, week filters, and lesson view',
+      'Know what to expect across the 30-day curriculum',
+    ],
+    content: `# Welcome to Vindicta Academy
+
+## What is Vindicta Academy?
+
+Vindicta Academy is your hands-on journey through modern security engineering. Across 30 structured lessons you will go from foundational security thinking to conducting penetration tests, reviewing code for vulnerabilities, and setting up defensive monitoring.
+
+## Curriculum at a Glance
+
+| Phase | Theme | Days |
+|-------|-------|------|
+| Week 1 | Security Foundations | 1–7 |
+| Week 2 | Web App Security | 8–14 |
+| Week 3 | Penetration Testing | 15–21 |
+| Week 4 | Defensive Security | 22–28 |
+| Capstone | Full Assessment | 29–30 |
+
+## Anatomy of a Lesson
+
+Every lesson contains:
+
+**Objectives** — A short list of what you will be able to do by the end.
+
+**Lesson content** — Explanations, code examples, tables, and real-world context. All the theory you need.
+
+**Lab Exercise** — A practical challenge that reinforces the theory. You apply concepts in your own environment or the Academy sandbox terminal.
+
+**Professor Vindicta** *(AI-Guided mode)* — An AI tutor who teaches the lesson interactively, asks questions to test your understanding, and awards lesson completion when you demonstrate mastery.
+
+## How Progression Works
+
+Lessons unlock sequentially. Complete a lesson to unlock the next one. This ensures each concept builds on solid foundations rather than jumping ahead.
+
+The Introduction module is professor-gated too. Start with Intro 1, demonstrate understanding with Professor Vindicta, then continue through each unlocked lesson in sequence.
+
+## Your Goal
+
+By Day 30 you will receive a **Vindicta Security Certificate** and have the skills to apply security thinking to every system you touch.
+
+Start the next introduction lesson to learn how to interact with Professor Vindicta and the practice terminal.`,
+  },
+  {
+    id: 'intro-2', day: 2, week: 0,
+    title: 'Interacting with Professor Vindicta',
+    duration: '10 min',
+    objectives: [
+      'Understand the three quiz input types: multiple choice, text answer, and number',
+      'Know how lesson completion works in AI-Guided mode',
+      'Feel confident asking follow-up questions and requesting hints',
+    ],
+    content: `# Interacting with Professor Vindicta
+
+In AI-Guided mode you learn alongside **Professor Vindicta** — an AI tutor powered by Claude. Understanding how to communicate with the professor makes learning much faster.
+
+## The Chat Panel
+
+The chat panel sits to the right of the lesson content. The professor opens each lesson with an introduction, then guides you through the material using questions and explanations.
+
+You respond by typing in the chat input and pressing **Enter** (or clicking **Send**).
+
+## Quiz Type 1 — Multiple Choice
+
+The professor presents labelled options:
+
+\`\`\`
+A) Confidentiality
+B) Integrity
+C) Availability
+D) All three
+\`\`\`
+
+Click an option to select it, or type the letter (A, B, C, or D) as your response. The professor explains why the answer is correct or incorrect and continues.
+
+## Quiz Type 2 — Text Answer
+
+For open-ended questions ("Explain how SQL injection works") type your answer freely and press Enter. The professor evaluates the content, not the length — a concise accurate answer is better than a long vague one.
+
+## Quiz Type 3 — Number Answer
+
+For numeric questions ("How many bits does AES-256 use?") type only the number. The professor accepts exact or approximate answers depending on context.
+
+## Getting Completion
+
+The professor tracks your understanding throughout the session. When you have demonstrated sufficient mastery, the professor sends a hidden completion signal and the lesson is marked complete — unlocking the next one. The check mark appears in the course grid.
+
+You do **not** need to answer every question perfectly. If you are stuck:
+- Say "I'm not sure" and the professor will explain
+- Ask "Can you give me an example?" for a concrete illustration
+- Say "Let's continue" to move to the next topic
+- Ask "What does that mean?" for plain-language clarification
+
+The professor adapts to your level. The goal is understanding, not a perfect score.`,
+    labHint: 'In the chat panel, greet Professor Vindicta and ask it to give you a practice multiple choice question about cybersecurity. Answer it and see how the professor responds.',
+  },
+  {
+    id: 'intro-3', day: 3, week: 0,
+    title: 'Using the Practice Terminal',
+    duration: '15 min',
+    objectives: [
+      'Understand what the Academy WSL sandbox is and why it is safe to experiment in',
+      'Use the terminal panel to run commands and read output',
+      'Know how professor-suggested commands work (LAB:CMD)',
+    ],
+    content: `# Using the Practice Terminal
+
+Some lessons pair theory with hands-on practice inside a dedicated **WSL sandbox** — a Linux environment running inside your Windows machine, isolated specifically for Academy use.
+
+## What is WSL?
+
+WSL (Windows Subsystem for Linux) runs a full Linux environment directly inside Windows — no virtual machine needed. Your Academy sandbox runs as a dedicated **academy** user account. You can experiment freely without affecting your main system or any other data.
+
+## Opening the Terminal
+
+The terminal panel appears beneath the chat when the professor activates it. You can also open it manually using the terminal icon (⬛) in the chat input bar.
+
+\`\`\`
+academy@ubuntu $ type a command here…     [▶ Run]  [↺]  [🗑]
+\`\`\`
+
+**Run** (or press **Enter**) — executes the command.
+**↺ Reconnect** — re-establishes the sandbox connection if it drops.
+**🗑 Clear** — clears the output panel.
+**↑ / ↓ arrow keys** — navigate your command history.
+
+## Status Indicator
+
+A small dot in the terminal header shows sandbox status:
+- 🟢 **Green** — sandbox ready
+- 🔵 **Blue, pulsing** — connecting
+- 🟡 **Amber** — connection issue (use Reconnect)
+
+## Professor-Suggested Commands
+
+The professor can pre-fill the terminal input with a suggested command. When it does, the command appears ready to run — press Enter to execute it, or edit it first.
+
+## What the Sandbox Can Do
+
+You can run standard Linux commands for file navigation, text processing, networking, and security tools. Common tools available include: \`nmap\`, \`curl\`, \`dig\`, \`openssl\`, \`whois\`, and more.
+
+The sandbox runs as a non-root user. For safety, certain destructive commands are blocked.
+
+## If WSL Is Not Configured
+
+If WSL is not installed on your system, a setup prompt will appear. You can install WSL from the Windows Settings or run:
+
+\`\`\`
+wsl --install
+\`\`\`
+
+in PowerShell as Administrator, then restart your machine. The Academy page in Settings lets you configure which WSL distribution the sandbox uses.`,
+    labHint: 'Click the terminal icon (⬛) in the chat bar to open the terminal manually. Type `echo "Academy sandbox ready"` and press Enter. You should see your message echoed back.',
+  },
+  {
+    id: 'intro-4', day: 4, week: 0,
+    title: 'Your First Security Commands',
+    duration: '20 min',
+    objectives: [
+      'Run basic Linux commands in the Academy sandbox terminal',
+      'Understand what whoami, uname, ls, pwd, and echo reveal about a system',
+      'Build comfort with the terminal workflow used throughout the course',
+    ],
+    content: `# Your First Security Commands
+
+Security professionals live in the terminal. Most security tools — scanners, proxies, exploit frameworks — are command-line only. Even if you are primarily a developer, fluency in the terminal makes you a significantly more capable practitioner.
+
+## The Commands You Will Run
+
+### whoami
+Prints the current user account name.
+
+\`\`\`bash
+$ whoami
+academy
+\`\`\`
+
+In your sandbox this is always \`academy\`. On a compromised system, this is the first thing an attacker runs — knowing who you are determines what you can access.
+
+### uname -a
+Prints system information: kernel version, hostname, architecture, and OS.
+
+\`\`\`bash
+$ uname -a
+Linux hostname 5.15.0 #1 SMP x86_64 GNU/Linux
+\`\`\`
+
+Knowing the kernel version is critical for finding privilege escalation exploits.
+
+### pwd
+Print Working Directory — shows your current location in the filesystem.
+
+\`\`\`bash
+$ pwd
+/home/academy
+\`\`\`
+
+### ls -la ~
+Lists all files (including hidden ones) in your home directory.
+
+\`\`\`bash
+$ ls -la ~
+drwxr-xr-x  .
+drwxr-xr-x  ..
+-rw-------  .bash_history
+-rw-r--r--  .bashrc
+\`\`\`
+
+The \`-la\` flags show hidden files (\`-a\`) and detailed permission info (\`-l\`). Attackers always check for hidden configuration files that may contain credentials or history.
+
+### echo "Hello, Security!"
+Prints a message to the terminal. Simple, but fundamental — echo is used everywhere in scripts to show status messages and debug values.
+
+\`\`\`bash
+$ echo "Hello, Security!"
+Hello, Security!
+\`\`\`
+
+## Why These Commands?
+
+These five commands answer the first questions any attacker asks after gaining access to a system: *Who am I? What OS is this? Where am I? What files are here?* Learning them from the defender's perspective — understanding what an attacker sees — is the foundation of effective security thinking.`,
+    labHint: 'Run all five commands: whoami, uname -a, pwd, ls -la ~, and echo "Hello, Security!". Share the output in the chat and the professor will explain what an attacker could infer from each result.',
+  },
   // ── Week 1: Security Foundations ────────────────────────────────────────
   {
     id: 'day-1', day: 1, week: 1,
@@ -1917,7 +2152,341 @@ You are ready to:
 Continue your journey: pursue OSCP, CEH, or eJPT certifications. Practice on HackTheBox and TryHackMe. Build security tooling. Stay curious.`,
     labHint: 'Write a complete professional report for the red team exercise you conducted on Day 29. Include all sections. Share it with a colleague for feedback on clarity.',
   },
+  {
+    id: 'day-31', day: 31, week: 6,
+    title: 'API Security Deep Dive',
+    duration: '75 min',
+    objectives: [
+      'Model common API abuse paths beyond basic input validation',
+      'Identify authorization flaws across object, function, and property access',
+      'Build an API test checklist that fits real engineering workflows',
+    ],
+    content: `# Day 31 - API Security Deep Dive
+
+## Why APIs Fail Differently
+
+APIs are not just web forms without HTML. They expose business objects, state transitions, identities, and trust boundaries directly to clients. That means the most damaging issues are often logic and authorization flaws.
+
+## The Three Authorization Checks
+
+**Object access**: Can this user access this invoice, project, tenant, or ticket?
+
+**Function access**: Can this user perform this action at all?
+
+**Property access**: Can this user read or update this field?
+
+## API Testing Loop
+
+1. Collect endpoints from the app, OpenAPI specs, traffic, and frontend code.
+2. Group endpoints by resource and action.
+3. Test each endpoint with another user's object IDs.
+4. Test lower-privilege tokens against privileged functions.
+5. Remove fields, add unexpected fields, and change types.
+6. Watch server responses for hidden behavior and excessive data.
+
+## Reporting API Risk
+
+Good API findings explain the business object, the trust boundary, the broken rule, and the impact. Screenshots matter less than request and response evidence.`,
+    labHint: 'Choose one API in a project you own. Create a table of endpoints, roles, required object ownership, and the exact request you would use to test the control.',
+  },
+  {
+    id: 'day-32', day: 32, week: 6,
+    title: 'Authentication & Session Hardening',
+    duration: '80 min',
+    objectives: [
+      'Review login, recovery, MFA, and session lifecycle risks',
+      'Design secure session expiry and token rotation behavior',
+      'Recognize dangerous convenience features in auth flows',
+    ],
+    content: `# Day 32 - Authentication & Session Hardening
+
+## Authentication Is a System
+
+Login is only one piece. A real authentication system includes enrollment, password changes, account recovery, MFA, session creation, session renewal, device trust, logout, and audit logging.
+
+## Session Checklist
+
+- Cookies use HttpOnly, Secure, and SameSite attributes.
+- Sessions rotate after login and privilege changes.
+- Long-lived tokens are revocable.
+- Logout invalidates server-side state.
+- Password reset links are short-lived, single-use, and audited.
+- MFA bypass paths are treated as high-risk code.
+
+## Common Failures
+
+**Password reset takeover** happens when reset tokens leak, do not expire, or can be reused.
+
+**Session fixation** happens when an attacker controls a session identifier before the victim logs in.
+
+**MFA confusion** happens when the app verifies that MFA exists but not that it was successfully completed for this login.`,
+    labHint: 'Review an app you control and write a lifecycle diagram for one session from login to logout. Mark every point where the session should rotate or expire.',
+  },
+  {
+    id: 'day-33', day: 33, week: 6,
+    title: 'SSRF & Cloud Metadata',
+    duration: '75 min',
+    objectives: [
+      'Understand how server-side request forgery reaches internal systems',
+      'Recognize cloud metadata and internal admin targets',
+      'Design layered SSRF defenses',
+    ],
+    content: `# Day 33 - SSRF & Cloud Metadata
+
+## The Core Idea
+
+Server-side request forgery lets an attacker make your server send a request. The attacker may not be able to reach internal services directly, but your server can.
+
+## High-Value Targets
+
+- Cloud metadata services
+- Internal admin panels
+- Localhost-only APIs
+- Redis, Elasticsearch, and dashboards
+- Webhooks that can call private networks
+
+## Defensive Layers
+
+1. Prefer allowlists of known hosts.
+2. Resolve DNS and validate the final IP address.
+3. Block private, loopback, link-local, and metadata IP ranges.
+4. Use network egress controls.
+5. Limit redirects and re-check each redirect target.
+6. Avoid returning raw response bodies to users.
+
+## The Cloud Metadata Trap
+
+Many cloud platforms expose instance credentials through metadata endpoints. Modern platforms add protections, but applications should still treat metadata access as a critical boundary.`,
+    labHint: 'Write a safe URL validation checklist for a webhook feature. Include DNS resolution, redirect handling, private IP blocking, and logging.',
+  },
+  {
+    id: 'day-34', day: 34, week: 6,
+    title: 'Deserialization & Supply Chain',
+    duration: '90 min',
+    objectives: [
+      'Explain why unsafe deserialization can become code execution',
+      'Map dependency trust in build and runtime environments',
+      'Create a supply-chain review checklist',
+    ],
+    content: `# Day 34 - Deserialization & Supply Chain
+
+## Deserialization Risk
+
+Deserialization turns stored or transmitted data back into objects. If a runtime can execute code during that process, attacker-controlled data may become attacker-controlled behavior.
+
+## Safer Patterns
+
+- Use simple data formats for untrusted input.
+- Avoid restoring full object graphs from user-controlled data.
+- Sign and validate serialized blobs that must cross trust boundaries.
+- Keep dangerous gadget-heavy libraries away from exposed parsers.
+
+## Supply Chain Thinking
+
+Dependencies are code you did not write but still ship. Review package names, maintainers, install scripts, lockfile changes, transitive dependencies, and release history.
+
+## Practical Review Questions
+
+- Did this dependency add postinstall scripts?
+- Does it execute network calls during build?
+- Is the package name visually similar to a popular one?
+- Does the update change a security-sensitive code path?`,
+    labHint: 'Inspect one recent dependency update in a project. Note maintainer, install scripts, transitive additions, and whether the package runs during build or runtime.',
+  },
+  {
+    id: 'day-35', day: 35, week: 6,
+    title: 'Secure Code Review Workshop',
+    duration: '2 hours',
+    objectives: [
+      'Perform a focused secure code review from sources to sinks',
+      'Turn review notes into concrete findings',
+      'Practice prioritizing code issues by exploitability',
+    ],
+    content: `# Day 35 - Secure Code Review Workshop
+
+## Review Strategy
+
+Start with threat-shaped questions instead of reading every file equally.
+
+**Entry points**: routes, controllers, commands, jobs, webhooks, file uploads.
+
+**Trust boundaries**: user input, third-party events, admin actions, tenant boundaries.
+
+**Dangerous sinks**: database queries, template rendering, shell execution, file paths, redirects, crypto, and authorization checks.
+
+## A Practical Review Pass
+
+1. Pick one feature.
+2. Trace input from request to storage or action.
+3. Mark every validation and authorization decision.
+4. Identify the first dangerous sink.
+5. Write a reproduction plan before writing the finding.
+
+## Prioritization
+
+The strongest findings combine attacker control, weak validation, a reachable sink, and meaningful impact.`,
+    labHint: 'Pick one route or controller in a project. Trace one input to its final sink and write a short finding or a short note explaining why it is safe.',
+  },
+  {
+    id: 'day-36', day: 36, week: 7,
+    title: 'Endpoint Telemetry',
+    duration: '70 min',
+    objectives: [
+      'Identify useful endpoint signals for security monitoring',
+      'Distinguish high-signal telemetry from noisy logs',
+      'Plan lightweight endpoint visibility for small teams',
+    ],
+    content: `# Day 36 - Endpoint Telemetry
+
+## What Endpoint Telemetry Answers
+
+Endpoint telemetry helps answer what ran, who ran it, what it touched, and where it connected.
+
+## Useful Signals
+
+- Process creation with command line
+- Parent and child process relationships
+- Network connections
+- File writes in sensitive paths
+- Persistence changes
+- Authentication events
+- Script interpreter usage
+
+## Signal Quality
+
+More logs are not automatically better. Good telemetry is complete enough for investigation, structured enough for detection, and cheap enough to keep.`,
+    labHint: 'Design an endpoint logging policy for one workstation or server. List five events you would collect and one detection each event enables.',
+  },
+  {
+    id: 'day-37', day: 37, week: 7,
+    title: 'Detection Engineering',
+    duration: '90 min',
+    objectives: [
+      'Write detections from attacker behavior instead of tool names',
+      'Map detections to data sources and expected false positives',
+      'Create a simple detection test plan',
+    ],
+    content: `# Day 37 - Detection Engineering
+
+## Detection Is an Engineering Discipline
+
+A detection is a small product. It has inputs, logic, outputs, owners, tests, tuning, and maintenance.
+
+## Detection Template
+
+- Behavior: what attacker action are we trying to catch?
+- Data source: which logs prove it happened?
+- Logic: what pattern identifies it?
+- False positives: what legitimate behavior looks similar?
+- Response: what should the analyst do next?
+- Test: how do we safely trigger it?
+
+## Behavior Over Tool Names
+
+Tools change names. Behaviors persist. Detect suspicious PowerShell download patterns, not just a single offensive framework string.`,
+    labHint: 'Write one detection idea for suspicious shell activity. Include behavior, data source, logic, false positives, response, and test.',
+  },
+  {
+    id: 'day-38', day: 38, week: 7,
+    title: 'Threat Hunting',
+    duration: '80 min',
+    objectives: [
+      'Turn a security hypothesis into a hunt',
+      'Use scoping and pivots to avoid endless searching',
+      'Document hunt outcomes even when no incident is found',
+    ],
+    content: `# Day 38 - Threat Hunting
+
+## Start With a Hypothesis
+
+Threat hunting is not wandering through logs. A hunt starts with a testable idea:
+
+"If an attacker gained persistence through scheduled tasks, we should see unusual task creation followed by unexpected process execution."
+
+## Hunt Flow
+
+1. State the hypothesis.
+2. Define data sources.
+3. Query broad enough to catch variants.
+4. Pivot on rare users, hosts, paths, and parent processes.
+5. Record benign explanations and tuning ideas.
+
+## Good Outcomes
+
+No incident found can still be a win if you improve visibility, tune a detection, or discover a gap before an attacker does.`,
+    labHint: 'Write a hunt hypothesis for persistence, credential access, or data staging. Define the first query and two pivots.',
+  },
+  {
+    id: 'day-39', day: 39, week: 7,
+    title: 'Incident Command Tabletop',
+    duration: '95 min',
+    objectives: [
+      'Coordinate roles during a security incident',
+      'Separate technical investigation from communications',
+      'Practice decision-making under incomplete information',
+    ],
+    content: `# Day 39 - Incident Command Tabletop
+
+## Why Tabletop Exercises Work
+
+Incidents are stressful because information is partial, timelines are messy, and business pressure is real. A tabletop lets a team practice decisions before the pressure arrives.
+
+## Core Roles
+
+- Incident commander: owns coordination and priorities.
+- Technical lead: owns investigation and containment options.
+- Communications lead: owns stakeholder updates.
+- Scribe: owns timeline and evidence.
+
+## Tabletop Scenario
+
+Your monitoring reports unusual outbound traffic from a production server. A developer says they deployed a new integration yesterday. The CFO asks whether customer data is exposed.
+
+## Decisions to Practice
+
+What do you isolate? Who approves downtime? What evidence must be preserved? When do you notify leadership? What do you say before you know the full answer?`,
+    labHint: 'Run a 20-minute tabletop with yourself or a teammate. Write a timeline, three decisions made, and two follow-up improvements.',
+  },
+  {
+    id: 'day-40', day: 40, week: 7,
+    title: 'Security Portfolio & Next Steps',
+    duration: '70 min',
+    objectives: [
+      'Package your Academy work into a security portfolio',
+      'Choose a focused next specialization path',
+      'Define a maintenance habit for continued growth',
+    ],
+    content: `# Day 40 - Security Portfolio & Next Steps
+
+## Turn Practice Into Evidence
+
+A security portfolio shows how you think. It can include sanitized reports, threat models, detection ideas, secure code review notes, lab writeups, dashboards, and tooling scripts.
+
+## Portfolio Checklist
+
+- One web app finding with evidence and remediation.
+- One threat model diagram or table.
+- One detection rule with test notes.
+- One incident tabletop summary.
+- One secure code review note.
+- One short reflection on what you would improve next.
+
+## Choose Your Next Path
+
+**Red team**: exploit development, Active Directory, web exploitation, OSCP-style labs.
+
+**Blue team**: SIEM, endpoint detection, incident response, cloud security, forensics.
+
+**Product security**: threat modeling, secure design reviews, code review, platform security.
+
+## Keep the Habit
+
+Security skill compounds through repetition. Schedule one small practice loop each week: read one advisory, review one code path, test one detection, or write one finding.`,
+    labHint: 'Create a portfolio outline with five artifacts from this Academy. Add one next action for red team, blue team, and product security.',
+  },
 ]
+
+export const MAIN_LESSON_COUNT = LESSONS.filter(lesson => !INTRO_LESSON_IDS.includes(lesson.id)).length
 
 export function getLessonsByWeek(week: number): Lesson[] {
   return LESSONS.filter(l => l.week === week)
@@ -1927,6 +2496,10 @@ export function getLesson(id: string): Lesson | undefined {
   return LESSONS.find(l => l.id === id)
 }
 
+export function getWeekMeta(weekNumber: number): Week {
+  return WEEKS.find(w => w.number === weekNumber) ?? WEEKS[WEEKS.length - 1]!
+}
+
 export function getWeekForDay(day: number): Week {
-  return WEEKS[Math.ceil(day / 7) - 1] ?? WEEKS[WEEKS.length - 1]
+  return WEEKS.find(w => w.number === Math.ceil(day / 7)) ?? WEEKS[WEEKS.length - 1]!
 }

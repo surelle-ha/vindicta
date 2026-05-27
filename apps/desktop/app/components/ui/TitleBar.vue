@@ -75,14 +75,11 @@ async function sendToTray() {
       class="pointer-events-none absolute inset-0 z-[1] bg-black/30"
     />
 
-    <div class="controls relative z-10 flex items-center gap-1.5">
-      <button
-        class="group flex size-3.5 items-center justify-center rounded-[2px] border border-red-400/30 bg-red-500/70 transition-[filter] hover:brightness-125"
-        title="Close"
-        @click.stop="openCloseModal"
-      >
-        <span class="text-[7px] font-black leading-none text-red-950 opacity-0 group-hover:opacity-100">x</span>
-      </button>
+    <span v-if="version" class="pointer-events-none relative z-10 font-mono text-[10px] text-[var(--text-muted)] opacity-50">
+      v{{ version }}
+    </span>
+
+    <div class="controls relative z-10 ml-auto flex items-center gap-1.5">
       <button
         class="group flex size-3.5 items-center justify-center rounded-[2px] border border-amber-300/30 bg-amber-400/75 transition-[filter] hover:brightness-125"
         title="Minimize"
@@ -97,6 +94,13 @@ async function sendToTray() {
       >
         <span class="text-[7px] font-black leading-none text-cyan-950 opacity-0 group-hover:opacity-100">+</span>
       </button>
+      <button
+        class="group flex size-3.5 items-center justify-center rounded-[2px] border border-red-400/30 bg-red-500/70 transition-[filter] hover:brightness-125"
+        title="Close"
+        @click.stop="openCloseModal"
+      >
+        <span class="text-[7px] font-black leading-none text-red-950 opacity-0 group-hover:opacity-100">x</span>
+      </button>
     </div>
 
     <span
@@ -106,9 +110,6 @@ async function sendToTray() {
       {{ aiActivity.hasActiveHandover ? 'Vindicta - AI Working' : app.vigilanteEnabled ? 'Vindicta — Vigilante' : 'Vindicta' }}
     </span>
 
-    <span v-if="version" class="pointer-events-none relative z-10 ml-auto font-mono text-[10px] text-[var(--text-muted)] opacity-50">
-      v{{ version }}
-    </span>
   </div>
 
   <GlassModal v-model="showCloseModal" title="Close Vindicta?" max-width="sm">

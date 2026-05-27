@@ -1,85 +1,169 @@
 <script setup lang="ts">
 import {
+  AlertTriangle,
   Award,
-  Bot,
   BookOpen,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
   Circle,
   Clock,
+  Download,
   GraduationCap,
+  Loader2,
+  Lock,
+  Mic,
+  MoreHorizontal,
+  PartyPopper,
   RotateCcw,
   Shield,
+  Sparkles,
   Swords,
   Target,
+  Volume2,
   Wifi,
   Zap,
 } from 'lucide-vue-next'
 import { useAcademyStore } from '~/stores/academy'
-import type { AcademyMode, AcademyAIModel } from '~/stores/academy'
-import { LESSONS, WEEKS, TOTAL_DAYS, getLesson } from '~/data/curriculum'
+import { LESSONS, WEEKS, TOTAL_DAYS, getLesson, getWeekMeta } from '~/data/curriculum'
 import type { Lesson, Week } from '~/data/curriculum'
 import AIProfessorChat from '~/components/academy/AIProfessorChat.vue'
+import AcademyAudioPlayer from '~/components/academy/AcademyAudioPlayer.vue'
+import { useAcademyTTS } from '~/composables/useAcademyTTS'
+import type { TTSScriptModel } from '~/composables/useAcademyTTS'
 
 const academy = useAcademyStore()
+const user = useUserStore()
+const tts      = useAcademyTTS()
+const { notify } = useNotifications()
 
 type View = 'setup' | 'course' | 'lesson' | 'certificate'
 const view = ref<View>('course')
 const currentLesson = ref<Lesson | null>(null)
 
+// ── TTS state ──────────────────────────────────────────────────────────────
+const showTTSModal      = ref(false)
+const ttsModalLesson    = ref<Lesson | null>(null)
+const ttsModalModel     = ref<TTSScriptModel>('claude')
+const currentAudioUrl   = ref<string | null>(null)
+const lessonActionMenuId = ref<string | null>(null)
+const showLeaveLessonModal = ref(false)
+const showCompletionModal = ref(false)
+const downloadingCertificate = ref(false)
+
+const ttsModelOptions: { id: TTSScriptModel; label: string; description: string }[] = [
+  { id: 'claude',      label: 'Claude',      description: 'Anthropic Claude Code CLI' },
+  { id: 'codex',       label: 'Codex',       description: 'OpenAI Codex CLI' },
+  { id: 'openrouter',  label: 'OpenRouter',  description: 'Configured OpenRouter model' },
+]
+
+function openCreateTTSModal(lesson: Lesson) {
+  ttsModalLesson.value = lesson
+  ttsModalModel.value = tts.scriptModel.value
+  showTTSModal.value   = true
+  lessonActionMenuId.value = null
+}
+
+async function confirmCreateTTS() {
+  if (!ttsModalLesson.value) return
+  const lesson = ttsModalLesson.value
+  showTTSModal.value = false
+  tts.setScriptModel(ttsModalModel.value)
+  try {
+    await tts.createTTS(lesson, ttsModalModel.value)
+    // If we're currently viewing that lesson, load the new audio
+    if (currentLesson.value?.id === lesson.id && view.value === 'lesson') {
+      if (currentAudioUrl.value) URL.revokeObjectURL(currentAudioUrl.value)
+      currentAudioUrl.value = await tts.loadAudio(lesson.id)
+    }
+  } catch (e: unknown) {
+    notify(tts.ttsError.value || 'TTS generation failed.', 'error')
+  }
+}
+
+async function clearLessonAudio(lesson: Lesson) {
+  lessonActionMenuId.value = null
+  await tts.clearAudio(lesson.id)
+  if (currentLesson.value?.id === lesson.id && currentAudioUrl.value) {
+    URL.revokeObjectURL(currentAudioUrl.value)
+    currentAudioUrl.value = null
+  }
+}
+
+function toggleLessonActions(lesson: Lesson) {
+  lessonActionMenuId.value = lessonActionMenuId.value === lesson.id ? null : lesson.id
+}
+
+function requestLeaveLesson() {
+  showLeaveLessonModal.value = true
+}
+
+function confirmLeaveLesson() {
+  showLeaveLessonModal.value = false
+  lessonActionMenuId.value = null
+  view.value = 'course'
+}
+
+// Load audio when entering lesson view; clear it on exit
+watch([view, currentLesson] as const, async ([v, lesson]) => {
+  if (currentAudioUrl.value) {
+    URL.revokeObjectURL(currentAudioUrl.value)
+    currentAudioUrl.value = null
+  }
+  if (v === 'lesson' && lesson) {
+    currentAudioUrl.value = await tts.loadAudio(lesson.id)
+  }
+})
+
 onMounted(async () => {
   await academy.loadFromDisk()
+  setupCertificateName.value = academy.certificateName ?? ''
   if (!academy.setupComplete) {
     view.value = 'setup'
   }
   else if (academy.allCompleted && academy.certificateIssuedAt) {
-    view.value = 'certificate'
+    view.value = 'course'
   }
   else {
     view.value = 'course'
     // Restore last visited lesson
     if (academy.lastVisitedLessonId) {
       const last = getLesson(academy.lastVisitedLessonId)
-      if (last) currentLesson.value = last
+      if (last && isLessonUnlocked(last)) currentLesson.value = last
     }
   }
 })
 
 // ── Setup ──────────────────────────────────────────────────────────────────
 
-const setupMode = ref<AcademyMode>(null)
-const setupModel = ref<AcademyAIModel>('claude')
+const setupCertificateName = ref('')
+const learnerGoal = ref('product-security')
+const learnerExperience = ref('starter')
+const learnerPace = ref('flexible')
 
-const modeOptions = [
-  {
-    id: 'manual' as AcademyMode,
-    label: 'Self-Paced',
-    description: 'Study at your own pace with curated lesson content. No AI interactions.',
-    icon: BookOpen,
-    color: 'text-indigo-300',
-    bg: 'bg-indigo-500/10',
-    border: 'border-indigo-500/20',
-  },
-  {
-    id: 'ai-assisted' as AcademyMode,
-    label: 'AI-Assisted',
-    description: 'Learn with Professor Vindicta — an AI tutor who teaches, asks questions, and evaluates your understanding.',
-    icon: Bot,
-    color: 'text-violet-300',
-    bg: 'bg-violet-500/10',
-    border: 'border-violet-500/20',
-  },
+const learnerGoalOptions = [
+  { id: 'product-security', label: 'Product Security', description: 'Threat model, review code, and build safer features.', icon: Shield },
+  { id: 'red-team', label: 'Red Team', description: 'Practice recon, exploitation, and reporting with authorization.', icon: Swords },
+  { id: 'blue-team', label: 'Blue Team', description: 'Learn monitoring, detection, response, and hardening.', icon: Wifi },
 ]
 
-const modelOptions = [
-  { id: 'claude' as AcademyAIModel, label: 'Claude (Recommended)', description: 'Anthropic Claude Code CLI' },
-  { id: 'codex' as AcademyAIModel, label: 'Codex', description: 'OpenAI Codex CLI' },
+const learnerExperienceOptions = [
+  { id: 'starter', label: 'New to security' },
+  { id: 'builder', label: 'Developer / engineer' },
+  { id: 'operator', label: 'Security practitioner' },
 ]
+
+const learnerPaceOptions = [
+  { id: 'flexible', label: 'Whenever I am free' },
+  { id: 'steady', label: 'A few lessons weekly' },
+  { id: 'intensive', label: 'Focused sprint' },
+]
+
+const certificateNamePlaceholder = computed(() => user.name?.trim() || 'Vindicta Learner')
 
 async function completeSetup() {
-  if (!setupMode.value) return
-  await academy.setSetup(setupMode.value as Exclude<AcademyMode, null>, setupModel.value)
+  const name = setupCertificateName.value.trim() || certificateNamePlaceholder.value
+  await academy.setSetup('ai-assisted', academy.aiModel ?? 'claude', name)
   view.value = 'course'
 }
 
@@ -88,18 +172,100 @@ async function completeSetup() {
 const weekFilter = ref<number | null>(null)
 
 const displayedLessons = computed(() =>
-  weekFilter.value ? LESSONS.filter(l => l.week === weekFilter.value) : LESSONS,
+  weekFilter.value !== null ? LESSONS.filter(l => l.week === weekFilter.value) : LESSONS,
 )
 
+const nextStudyLesson = computed(() =>
+  LESSONS.find(lesson => !isIntroLesson(lesson) && isLessonUnlocked(lesson) && !academy.isCompleted(lesson.id))
+  ?? LESSONS.find(lesson => isLessonUnlocked(lesson) && !academy.isCompleted(lesson.id))
+  ?? null,
+)
+
+const resumeLesson = computed(() => {
+  const last = academy.lastVisitedLessonId ? getLesson(academy.lastVisitedLessonId) : null
+  if (last && isLessonUnlocked(last) && !academy.isCompleted(last.id)) return last
+  return nextStudyLesson.value
+})
+
+const activeMilestones = computed(() => WEEKS.map(week => {
+  const lessons = LESSONS.filter(lesson => lesson.week === week.number && !isIntroLesson(lesson))
+  const completed = lessons.filter(lesson => academy.isCompleted(lesson.id)).length
+  return {
+    ...week,
+    total: lessons.length,
+    completed,
+    percent: lessons.length ? Math.round((completed / lessons.length) * 100) : 100,
+  }
+}))
+
 function weekForLesson(lesson: Lesson): Week {
-  return WEEKS[lesson.week - 1] ?? WEEKS[WEEKS.length - 1]!
+  return getWeekMeta(lesson.week)
+}
+
+/** Returns "Intro 1–4" for orientation lessons, "Lesson 1–30" for main course. */
+function lessonLabel(lesson: Lesson): string {
+  return lesson.week === 0 ? `Intro ${lesson.day}` : `Lesson ${lesson.day}`
+}
+
+function isIntroLesson(lesson: Lesson): boolean {
+  return lesson.week === 0
+}
+
+function lessonIndex(lesson: Lesson) {
+  return LESSONS.findIndex(item => item.id === lesson.id)
+}
+
+function isLessonUnlocked(lesson: Lesson) {
+  const index = lessonIndex(lesson)
+  if (index <= 0) return true
+  const previous = LESSONS[index - 1]
+  return previous ? academy.isCompleted(previous.id) : false
+}
+
+function lessonCardTheme(lesson: Lesson): Record<string, string> {
+  const palettes: Record<number, { accent: string; glow: string; wash: string; shine: string }> = {
+    0: { accent: '45, 212, 191',  glow: '20, 184, 166',  wash: '13, 148, 136',  shine: '153, 246, 228' },
+    1: { accent: '129, 140, 248', glow: '99, 102, 241',  wash: '79, 70, 229',   shine: '199, 210, 254' },
+    2: { accent: '196, 181, 253', glow: '139, 92, 246',  wash: '124, 58, 237',  shine: '221, 214, 254' },
+    3: { accent: '251, 113, 133', glow: '244, 63, 94',   wash: '225, 29, 72',   shine: '254, 205, 211' },
+    4: { accent: '52, 211, 153',  glow: '16, 185, 129',  wash: '5, 150, 105',   shine: '167, 243, 208' },
+    5: { accent: '251, 191, 36',  glow: '245, 158, 11',  wash: '217, 119, 6',   shine: '253, 230, 138' },
+    6: { accent: '34, 211, 238',  glow: '6, 182, 212',   wash: '8, 145, 178',    shine: '165, 243, 252' },
+    7: { accent: '125, 211, 252', glow: '14, 165, 233',  wash: '2, 132, 199',    shine: '186, 230, 253' },
+  }
+  const palette = palettes[lesson.week] ?? palettes[1]!
+  return {
+    '--lesson-accent': palette.accent,
+    '--lesson-glow': palette.glow,
+    '--lesson-wash': palette.wash,
+    '--lesson-shine': palette.shine,
+  }
 }
 
 function openLesson(lesson: Lesson) {
+  lessonActionMenuId.value = null
+  if (!isLessonUnlocked(lesson)) return
   currentLesson.value = lesson
   view.value = 'lesson'
   void academy.startLesson(lesson.id)
   void academy.setLastVisited('week-' + lesson.week, lesson.id)
+}
+
+async function completeLessonAndCelebrate(lesson: Lesson, allowReplay = false) {
+  const wasComplete = academy.allCompleted && !!academy.certificateIssuedAt
+  await academy.grantLessonCompletion(lesson.id)
+  await nextTick()
+  if (academy.allCompleted && academy.certificateIssuedAt && (!wasComplete || allowReplay)) {
+    showCompletionModal.value = true
+  }
+}
+
+function handleLessonCardClick(e: MouseEvent, lesson: Lesson) {
+  if (import.meta.env.DEV && e.ctrlKey && e.shiftKey) {
+    void completeLessonAndCelebrate(lesson, true)
+    return
+  }
+  openLesson(lesson)
 }
 
 // ── Lesson view ────────────────────────────────────────────────────────────
@@ -109,7 +275,8 @@ const lessonContentEl = ref<HTMLElement | null>(null)
 const nextLesson = computed<Lesson | null>(() => {
   if (!currentLesson.value) return null
   const idx = LESSONS.findIndex(l => l.id === currentLesson.value!.id)
-  return (idx < LESSONS.length - 1 ? LESSONS[idx + 1] : null) ?? null
+  const next = (idx < LESSONS.length - 1 ? LESSONS[idx + 1] : null) ?? null
+  return next && isLessonUnlocked(next) ? next : null
 })
 
 const prevLesson = computed<Lesson | null>(() => {
@@ -120,14 +287,11 @@ const prevLesson = computed<Lesson | null>(() => {
 
 async function markComplete() {
   if (!currentLesson.value) return
-  await academy.completeLesson(currentLesson.value.id)
-  if (academy.allCompleted) {
-    view.value = 'certificate'
-  }
+  await completeLessonAndCelebrate(currentLesson.value)
 }
 
 function goToLesson(lesson: Lesson | null) {
-  if (!lesson) return
+  if (!lesson || !isLessonUnlocked(lesson)) return
   currentLesson.value = lesson
   void academy.startLesson(lesson.id)
   void academy.setLastVisited('week-' + lesson.week, lesson.id)
@@ -138,6 +302,7 @@ function goToLesson(lesson: Lesson | null) {
 
 function renderMarkdown(text: string): string {
   let html = text
+    .replace(/^#\s*Day\s+\d+\s+.\s+/, '# ')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
@@ -202,95 +367,257 @@ const certDate = computed(() => {
   })
 })
 
+const certificateName = computed(() => {
+  return academy.certificateName || user.name || 'Vindicta Learner'
+})
+
+const certificateId = computed(() => {
+  const issued = academy.certificateIssuedAt ? new Date(academy.certificateIssuedAt) : new Date()
+  const stamp = issued.toISOString().slice(0, 10).replace(/-/g, '')
+  return `VND-${stamp}-${String(academy.completedCount).padStart(2, '0')}`
+})
+
+const certificateSkills = [
+  'Security Foundations',
+  'Web App Security',
+  'Penetration Testing',
+  'Defensive Monitoring',
+  'Secure Code Review',
+  'Incident Response',
+]
+
+function showCertificate() {
+  showCompletionModal.value = false
+  view.value = 'certificate'
+}
+
+function confettiStyle(index: number) {
+  return {
+    '--i': String(index),
+    '--fall-x': `${(index % 7) * 14}%`,
+  }
+}
+
+function sanitizeFileName(value: string) {
+  return value
+    .replace(/[<>:"/\\|?*\x00-\x1F]/g, '-')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 120)
+    || 'Vindicta Academy Certificate'
+}
+
+function pdfText(value: string) {
+  return value
+    .normalize('NFKD')
+    .replace(/[^\x20-\x7E]/g, '')
+    .replace(/\\/g, '\\\\')
+    .replace(/\(/g, '\\(')
+    .replace(/\)/g, '\\)')
+}
+
+function pdfLine(text: string, x: number, y: number, size: number, font = 'F1', color = '1 1 1') {
+  return `BT /${font} ${size} Tf ${color} rg ${x} ${y} Td (${pdfText(text)}) Tj ET\n`
+}
+
+function buildCertificatePdf() {
+  const content = [
+    'q\n',
+    '0.035 0.039 0.055 rg 0 0 842 595 re f\n',
+    '0.96 0.68 0.22 rg 42 42 758 511 re S\n',
+    '0.14 0.59 0.54 rg 58 58 726 479 re S\n',
+    pdfLine('CERTIFICATE OF COMPLETION', 286, 470, 13, 'F2', '0.96 0.74 0.28'),
+    pdfLine('Vindicta Security Academy', 219, 421, 30, 'F2', '1 1 1'),
+    pdfLine('Presented to', 382, 365, 12, 'F1', '0.65 0.68 0.76'),
+    pdfLine(certificateName.value, 278, 323, 28, 'F2', '1 1 1'),
+    pdfLine('For completing the full security engineering curriculum across foundations, application security,', 132, 273, 12, 'F1', '0.78 0.81 0.88'),
+    pdfLine('red team practice, defensive operations, secure review, and incident response.', 194, 252, 12, 'F1', '0.78 0.81 0.88'),
+    pdfLine(`${TOTAL_DAYS} lessons completed`, 104, 177, 14, 'F2', '0.96 0.74 0.28'),
+    pdfLine('100% professor approved', 333, 177, 14, 'F2', '0.34 0.86 0.72'),
+    pdfLine(certificateId.value, 569, 177, 12, 'F2', '0.70 0.75 0.98'),
+    pdfLine(`Issued on ${certDate.value}`, 347, 108, 12, 'F1', '0.65 0.68 0.76'),
+    'Q\n',
+  ].join('')
+
+  const encoder = new TextEncoder()
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 842 595] /Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> /Contents 4 0 R >>',
+    `<< /Length ${encoder.encode(content).length} >>\nstream\n${content}endstream`,
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>',
+  ]
+
+  let pdf = '%PDF-1.4\n'
+  const offsets: number[] = [0]
+  for (let i = 0; i < objects.length; i++) {
+    offsets.push(encoder.encode(pdf).length)
+    pdf += `${i + 1} 0 obj\n${objects[i]}\nendobj\n`
+  }
+  const xrefOffset = encoder.encode(pdf).length
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`
+  for (let i = 1; i < offsets.length; i++) {
+    pdf += `${String(offsets[i]).padStart(10, '0')} 00000 n \n`
+  }
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`
+
+  return encoder.encode(pdf)
+}
+
+function browserDownload(bytes: Uint8Array, filename: string) {
+  const blob = new Blob([bytes], { type: 'application/pdf' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+async function downloadCertificatePdf() {
+  if (downloadingCertificate.value) return
+  downloadingCertificate.value = true
+  const filename = sanitizeFileName(`Vindicta Academy Certificate - ${certificateName.value}.pdf`)
+  const bytes = buildCertificatePdf()
+  try {
+    const { save } = await import('@tauri-apps/plugin-dialog')
+    const { writeFile } = await import('@tauri-apps/plugin-fs')
+    const path = await save({
+      defaultPath: filename,
+      filters: [{ name: 'PDF document', extensions: ['pdf'] }],
+    })
+    if (path) {
+      await writeFile(path, bytes)
+      notify('Certificate PDF saved.', 'success')
+    }
+  }
+  catch {
+    browserDownload(bytes, filename)
+    notify('Certificate PDF downloaded.', 'success')
+  }
+  finally {
+    downloadingCertificate.value = false
+  }
+}
+
 async function resetAcademy() {
-  await academy.resetSetup()
+  await academy.resetProgress(false)
   view.value = 'setup'
   currentLesson.value = null
   weekFilter.value = null
+  setupCertificateName.value = ''
+  showCompletionModal.value = false
 }
 </script>
 
 <template>
-  <div class="flex h-full flex-col overflow-hidden">
+  <div class="academy-page flex h-full flex-col overflow-hidden">
 
     <!-- ── SETUP ──────────────────────────────────────────────────────────── -->
-    <div v-if="view === 'setup'" class="flex h-full items-center justify-center p-6">
-      <div class="w-full max-w-xl space-y-8">
+    <div v-if="view === 'setup'" class="flex h-full items-center justify-center overflow-y-auto p-6 custom-scroll">
+      <div class="w-full max-w-5xl space-y-6">
         <!-- Header -->
         <div class="text-center">
           <div class="mx-auto mb-4 grid size-16 place-items-center rounded-2xl border border-indigo-500/20 bg-indigo-500/10">
             <GraduationCap class="size-8 text-indigo-300" />
           </div>
-          <h1 class="text-2xl font-bold text-[var(--text)]">Security Bootcamp</h1>
-          <p class="mt-1 text-sm text-[var(--text-muted)]">30-day hands-on curriculum from security fundamentals to professional pentesting</p>
+          <h1 class="font-display text-3xl font-bold text-[var(--text)]">Vindicta Academy Enrollment</h1>
+          <p class="mx-auto mt-2 max-w-2xl text-sm leading-relaxed text-[var(--text-muted)]">
+            Build your security path at your pace. Your professor unlocks lessons when you demonstrate understanding, so learning fits the time you actually have.
+          </p>
         </div>
 
-        <!-- Mode selection -->
-        <div class="space-y-3">
-          <p class="text-[10px] font-semibold uppercase tracking-widest text-[var(--text-faint)]">Choose your learning mode</p>
-          <div class="grid gap-3 sm:grid-cols-2">
-            <button
-              v-for="mode in modeOptions"
-              :key="mode.id ?? 'unknown'"
-              class="rounded-xl border p-4 text-left transition-all"
-              :class="setupMode === mode.id
-                ? [mode.border, mode.bg]
-                : 'border-[var(--border)] hover:border-indigo-500/20 hover:bg-white/[0.02]'"
-              @click="setupMode = mode.id"
-            >
-              <div class="flex items-center gap-2.5 mb-2">
-                <div class="grid size-8 shrink-0 place-items-center rounded-lg" :class="[mode.bg, mode.border, 'border']">
-                  <component :is="mode.icon" class="size-4" :class="mode.color" />
-                </div>
-                <span class="text-sm font-semibold text-[var(--text)]">{{ mode.label }}</span>
+        <div class="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+          <div class="space-y-4 rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-5">
+            <div>
+              <p class="text-[10px] font-semibold uppercase tracking-widest text-[var(--text-faint)]">What are you aiming for?</p>
+              <div class="mt-3 grid gap-3 md:grid-cols-3">
+                <button
+                  v-for="goal in learnerGoalOptions"
+                  :key="goal.id"
+                  class="rounded-xl border p-3 text-left transition-all"
+                  :class="learnerGoal === goal.id ? 'border-teal-500/30 bg-teal-500/10' : 'border-[var(--border)] hover:border-teal-500/20 hover:bg-white/[0.03]'"
+                  @click="learnerGoal = goal.id"
+                >
+                  <component :is="goal.icon" class="size-4 text-teal-300" />
+                  <p class="mt-3 text-sm font-semibold text-[var(--text)]">{{ goal.label }}</p>
+                  <p class="mt-1 text-[11px] leading-relaxed text-[var(--text-muted)]">{{ goal.description }}</p>
+                </button>
               </div>
-              <p class="text-xs leading-relaxed text-[var(--text-muted)]">{{ mode.description }}</p>
-            </button>
-          </div>
-        </div>
+            </div>
 
-        <!-- Model selection (AI mode only) -->
-        <Transition
-          enter-active-class="transition-all duration-200 ease-out"
-          enter-from-class="opacity-0 -translate-y-2"
-          enter-to-class="opacity-100 translate-y-0"
-          leave-active-class="transition-all duration-150 ease-in"
-          leave-from-class="opacity-100"
-          leave-to-class="opacity-0"
-        >
-          <div v-if="setupMode === 'ai-assisted'" class="space-y-2">
-            <p class="text-[10px] font-semibold uppercase tracking-widest text-[var(--text-faint)]">AI model for professor</p>
-            <div class="grid gap-2 sm:grid-cols-2">
-              <button
-                v-for="m in modelOptions"
-                :key="m.id ?? 'unknown'"
-                class="rounded-xl border p-3 text-left transition-all"
-                :class="setupModel === m.id
-                  ? 'border-violet-500/30 bg-violet-500/10'
-                  : 'border-[var(--border)] hover:border-violet-500/20'"
-                @click="setupModel = m.id"
-              >
-                <p class="text-xs font-semibold text-[var(--text)]">{{ m.label }}</p>
-                <p class="mt-0.5 text-[10px] text-[var(--text-faint)]">{{ m.description }}</p>
-              </button>
+            <div class="grid gap-4 md:grid-cols-2">
+              <div>
+                <p class="text-[10px] font-semibold uppercase tracking-widest text-[var(--text-faint)]">Current experience</p>
+                <div class="mt-2 space-y-2">
+                  <button
+                    v-for="option in learnerExperienceOptions"
+                    :key="option.id"
+                    class="flex w-full items-center justify-between rounded-xl border px-3 py-2.5 text-left text-xs transition-all"
+                    :class="learnerExperience === option.id ? 'border-indigo-500/30 bg-indigo-500/10 text-indigo-200' : 'border-[var(--border)] text-[var(--text-muted)] hover:bg-white/[0.03]'"
+                    @click="learnerExperience = option.id"
+                  >
+                    {{ option.label }}
+                    <CheckCircle2 v-if="learnerExperience === option.id" class="size-3.5" />
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <p class="text-[10px] font-semibold uppercase tracking-widest text-[var(--text-faint)]">Learning rhythm</p>
+                <div class="mt-2 space-y-2">
+                  <button
+                    v-for="option in learnerPaceOptions"
+                    :key="option.id"
+                    class="flex w-full items-center justify-between rounded-xl border px-3 py-2.5 text-left text-xs transition-all"
+                    :class="learnerPace === option.id ? 'border-violet-500/30 bg-violet-500/10 text-violet-200' : 'border-[var(--border)] text-[var(--text-muted)] hover:bg-white/[0.03]'"
+                    @click="learnerPace = option.id"
+                  >
+                    {{ option.label }}
+                    <CheckCircle2 v-if="learnerPace === option.id" class="size-3.5" />
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
-        </Transition>
 
+          <div class="space-y-4 rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-5">
+            <div class="rounded-2xl border border-amber-500/20 bg-amber-500/[0.06] p-4">
+              <div class="flex items-start gap-3">
+                <div class="grid size-10 shrink-0 place-items-center rounded-xl border border-amber-500/25 bg-amber-500/10">
+                  <Award class="size-5 text-amber-300" />
+                </div>
+                <div class="min-w-0 flex-1">
+                  <p class="text-[10px] font-semibold uppercase tracking-widest text-amber-200/80">Certificate name</p>
+                  <label for="academy-certificate-name" class="mt-2 block text-sm font-semibold text-[var(--text)]">Name to print on your certificate</label>
+                  <input
+                    id="academy-certificate-name"
+                    v-model="setupCertificateName"
+                    type="text"
+                    autocomplete="name"
+                    :placeholder="certificateNamePlaceholder"
+                    class="mt-3 h-11 w-full rounded-xl border border-amber-500/20 bg-black/20 px-3 text-sm text-[var(--text)] outline-none transition-colors placeholder:text-[var(--text-faint)] focus:border-amber-400/50 focus:bg-black/30"
+                  >
+                  <p class="mt-2 text-[11px] leading-relaxed text-[var(--text-muted)]">
+                    Leave this blank to use your onboarding name.
+                  </p>
+                </div>
+              </div>
+            </div>
         <!-- CTA -->
         <button
-          :disabled="!setupMode"
           class="w-full rounded-xl bg-indigo-600/80 py-3 text-sm font-semibold text-white transition-all hover:bg-indigo-600 disabled:opacity-40"
           @click="completeSetup"
         >
-          Start Bootcamp →
+          Enroll and Open Roadmap
         </button>
 
         <!-- Stats -->
         <div class="flex justify-center gap-6 text-center">
           <div>
-            <p class="text-lg font-bold text-[var(--text)]">30</p>
-            <p class="text-[10px] text-[var(--text-faint)]">Days</p>
+            <p class="text-lg font-bold text-[var(--text)]">{{ TOTAL_DAYS }}</p>
+            <p class="text-[10px] text-[var(--text-faint)]">Lessons</p>
           </div>
           <div>
             <p class="text-lg font-bold text-[var(--text)]">~45h</p>
@@ -305,15 +632,18 @@ async function resetAcademy() {
     </div>
 
     <!-- ── COURSE VIEW ─────────────────────────────────────────────────────── -->
+      </div>
+    </div>
+
     <template v-else-if="view === 'course'">
       <div class="flex shrink-0 items-center gap-3 border-b border-[var(--border)] bg-[var(--bg-surface)] px-4 py-3">
         <div class="grid size-8 shrink-0 place-items-center rounded-lg border border-indigo-500/20 bg-indigo-500/10">
           <GraduationCap class="size-4 text-indigo-300" />
         </div>
         <div class="flex-1 min-w-0">
-          <h1 class="text-sm font-semibold text-[var(--text)]">30-Day Security Bootcamp</h1>
+          <h1 class="text-sm font-semibold text-[var(--text)]">Academy Roadmap</h1>
           <p class="text-[11px] text-[var(--text-muted)]">
-            {{ academy.completedCount }}/{{ TOTAL_DAYS }} days completed
+            {{ academy.completedCount }}/{{ TOTAL_DAYS }} lessons completed
             · {{ academy.progressPercent }}%
             · <span class="capitalize">{{ academy.mode ?? 'manual' }}</span> mode
           </p>
@@ -334,6 +664,78 @@ async function resetAcademy() {
       </div>
 
       <div class="flex-1 overflow-y-auto p-4 space-y-6 custom-scroll">
+        <section class="academy-roadmap-hero overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-5">
+          <div class="grid gap-5 lg:grid-cols-[1fr_18rem]">
+            <div class="min-w-0">
+              <p class="text-[10px] font-semibold uppercase tracking-[0.18em] text-teal-300/80">Student roadmap</p>
+              <h2 class="mt-2 font-display text-3xl font-bold text-[var(--text)]">Choose the next unlocked lesson and keep moving.</h2>
+              <p class="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--text-muted)]">
+                The path is flexible, but progress is still professor-gated. Finish a lesson by proving understanding in chat, then the next node opens.
+              </p>
+              <div class="mt-5 flex flex-wrap gap-2">
+                <button
+                  v-if="resumeLesson"
+                  class="inline-flex items-center gap-2 rounded-xl bg-indigo-600/85 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-600"
+                  @click="openLesson(resumeLesson)"
+                >
+                  Continue: {{ resumeLesson.title }}
+                  <ChevronRight class="size-4" />
+                </button>
+                <button
+                  class="inline-flex items-center gap-2 rounded-xl border border-[var(--border)] bg-white/[0.04] px-4 py-2.5 text-sm text-[var(--text-muted)] transition-colors hover:bg-white/[0.07] hover:text-[var(--text)]"
+                  @click="weekFilter = null"
+                >
+                  View Full Path
+                </button>
+                <button
+                  v-if="academy.allCompleted && academy.certificateIssuedAt"
+                  class="inline-flex items-center gap-2 rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-2.5 text-sm font-semibold text-amber-200 transition-colors hover:bg-amber-500/15"
+                  @click="view = 'certificate'"
+                >
+                  <Award class="size-4" />
+                  View Certificate
+                </button>
+              </div>
+            </div>
+
+            <div class="rounded-xl border border-white/10 bg-black/15 p-4">
+              <div class="flex items-center justify-between">
+                <p class="text-[10px] uppercase tracking-[0.14em] text-[var(--text-faint)]">Progress</p>
+                <p class="text-sm font-bold text-[var(--text)]">{{ academy.progressPercent }}%</p>
+              </div>
+              <div class="mt-3 h-2 rounded-full bg-white/[0.06]">
+                <div class="h-2 rounded-full bg-gradient-to-r from-teal-400 via-indigo-400 to-violet-400 transition-all" :style="{ width: academy.progressPercent + '%' }" />
+              </div>
+              <div class="mt-4 grid grid-cols-2 gap-2">
+                <div class="rounded-lg border border-white/10 bg-white/[0.03] p-3">
+                  <p class="text-lg font-bold text-[var(--text)]">{{ academy.completedCount }}</p>
+                  <p class="text-[10px] text-[var(--text-faint)]">Completed</p>
+                </div>
+                <div class="rounded-lg border border-white/10 bg-white/[0.03] p-3">
+                  <p class="text-lg font-bold text-[var(--text)]">{{ TOTAL_DAYS }}</p>
+                  <p class="text-[10px] text-[var(--text-faint)]">Lessons</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-6 grid gap-2 md:grid-cols-4 xl:grid-cols-8">
+            <button
+              v-for="milestone in activeMilestones"
+              :key="milestone.number"
+              class="rounded-xl border p-3 text-left transition-all hover:-translate-y-0.5"
+              :class="weekFilter === milestone.number ? [milestone.border, milestone.bg] : 'border-white/10 bg-white/[0.03] hover:border-white/20'"
+              @click="weekFilter = weekFilter === milestone.number ? null : milestone.number"
+            >
+              <p class="truncate text-[10px] font-bold uppercase tracking-widest" :class="milestone.color">{{ milestone.title }}</p>
+              <p class="mt-1 truncate text-[11px] text-[var(--text-muted)]">{{ milestone.theme }}</p>
+              <div class="mt-3 h-1 rounded-full bg-white/[0.08]">
+                <div class="h-1 rounded-full bg-current transition-all" :class="milestone.color" :style="{ width: milestone.percent + '%' }" />
+              </div>
+            </button>
+          </div>
+        </section>
+
         <!-- Week filter tabs -->
         <div class="flex items-center gap-1.5 overflow-x-auto">
           <button
@@ -341,7 +743,7 @@ async function resetAcademy() {
             :class="weekFilter === null ? 'border-indigo-500/30 bg-indigo-500/10 text-indigo-300' : 'border-[var(--border)] text-[var(--text-faint)] hover:text-[var(--text-muted)]'"
             @click="weekFilter = null"
           >
-            All Days
+            All Lessons
           </button>
           <button
             v-for="week in WEEKS"
@@ -357,7 +759,7 @@ async function resetAcademy() {
         <!-- Weeks + Lessons -->
         <div class="space-y-6">
           <template v-for="week in WEEKS" :key="week.number">
-            <div v-if="!weekFilter || weekFilter === week.number" class="space-y-3">
+            <div v-if="weekFilter === null || weekFilter === week.number" class="space-y-3">
               <!-- Week header -->
               <div class="flex items-center gap-2.5">
                 <div class="h-px flex-1 bg-[var(--border)]" />
@@ -369,45 +771,113 @@ async function resetAcademy() {
                 <div class="h-px flex-1 bg-[var(--border)]" />
               </div>
 
-              <!-- Day cards grid -->
+              <!-- Lesson cards grid -->
               <div class="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                <button
+                <div
                   v-for="lesson in LESSONS.filter(l => l.week === week.number)"
                   :key="lesson.id"
-                  class="group relative flex flex-col gap-1.5 rounded-xl border p-3 text-left transition-all"
+                  class="academy-lesson-card group relative flex flex-col gap-2 overflow-hidden rounded-xl border p-3.5 text-left transition-all"
                   :class="[
-                    academy.isCompleted(lesson.id)
-                      ? 'border-emerald-500/25 bg-emerald-500/[0.06] hover:bg-emerald-500/10'
+                    !isLessonUnlocked(lesson)
+                      ? 'is-locked cursor-not-allowed opacity-55'
+                      : academy.isCompleted(lesson.id)
+                      ? 'is-complete cursor-pointer'
                       : lesson.id === academy.lastVisitedLessonId && !academy.isCompleted(lesson.id)
-                        ? 'border-indigo-500/30 bg-indigo-500/[0.06] hover:bg-indigo-500/10'
-                        : 'border-[var(--border)] hover:border-indigo-500/20 hover:bg-white/[0.03]',
+                        ? 'is-current cursor-pointer'
+                        : 'is-open cursor-pointer',
                   ]"
-                  @click="openLesson(lesson)"
+                  :style="lessonCardTheme(lesson)"
+                  role="button"
+                  tabindex="0"
+                  @click="handleLessonCardClick($event, lesson)"
+                  @keydown.enter.prevent="openLesson(lesson)"
+                  @keydown.space.prevent="openLesson(lesson)"
                 >
-                  <!-- Day number + status -->
-                  <div class="flex items-center justify-between">
-                    <span class="text-[10px] font-bold uppercase tracking-widest" :class="weekForLesson(lesson).color">
-                      Day {{ lesson.day }}
+                  <div class="pointer-events-none absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,transparent,rgba(var(--lesson-shine),0.9),transparent)] opacity-70" />
+                  <div class="pointer-events-none absolute -right-8 -top-8 size-20 rounded-full bg-[rgba(var(--lesson-glow),0.16)] blur-2xl transition-opacity group-hover:opacity-100" />
+
+                  <!-- Lesson number + status -->
+                  <div class="relative flex items-center justify-between">
+                    <span class="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest" :class="weekForLesson(lesson).color">
+                      {{ lessonLabel(lesson) }}
                     </span>
                     <CheckCircle2 v-if="academy.isCompleted(lesson.id)" class="size-3.5 text-emerald-400" />
+                    <Lock v-else-if="!isLessonUnlocked(lesson)" class="size-3.5 text-[var(--text-faint)]" />
                     <div
                       v-else-if="lesson.id === academy.lastVisitedLessonId"
-                      class="size-1.5 rounded-full bg-indigo-400"
+                      class="size-1.5 rounded-full"
+                      :class="isIntroLesson(lesson) ? 'bg-teal-400' : 'bg-indigo-400'"
                     />
                     <Circle v-else class="size-3 text-[var(--border)]" />
                   </div>
 
                   <!-- Title -->
-                  <p class="text-xs font-semibold leading-snug text-[var(--text)] group-hover:text-white">
+                  <p class="relative min-h-8 text-sm font-semibold leading-snug text-[var(--text)] transition-colors group-hover:text-white">
                     {{ lesson.title }}
                   </p>
 
                   <!-- Duration -->
-                  <div class="flex items-center gap-1 text-[10px] text-[var(--text-faint)]">
-                    <Clock class="size-2.5 shrink-0" />
-                    {{ lesson.duration }}
+                  <div class="relative flex flex-wrap items-center gap-1.5 text-[10px] text-[var(--text-faint)]">
+                    <span class="flex items-center gap-1 rounded-full border border-white/10 bg-black/10 px-2 py-0.5">
+                      <Clock class="size-2.5 shrink-0" />
+                      {{ lesson.duration }}
+                    </span>
+                    <span
+                      v-if="!academy.isCompleted(lesson.id)"
+                      class="rounded-full border border-indigo-500/20 bg-indigo-500/[0.08] px-2 py-0.5 font-medium text-indigo-200/80"
+                    >
+                      Professor-gated
+                    </span>
                   </div>
-                </button>
+
+                  <div class="relative mt-auto flex min-h-4 items-center pr-8">
+                    <span
+                      v-if="tts.cachedLessonIds.value.has(lesson.id)"
+                      class="flex items-center gap-1 text-[9px] text-teal-400/80"
+                    >
+                      <Volume2 class="size-2.5" />
+                      Narration ready
+                    </span>
+                    <span
+                      v-else-if="tts.generatingLessonIds.value.has(lesson.id)"
+                      class="flex items-center gap-1 text-[9px] text-teal-400/70"
+                    >
+                      <Loader2 class="size-2.5 animate-spin" />
+                      {{ tts.progressByLessonId.value[lesson.id] || 'Creating...' }}
+                    </span>
+                  </div>
+
+                  <button
+                    class="absolute bottom-2 right-2 grid size-6 place-items-center rounded-md text-[var(--text-faint)] transition-colors hover:bg-white/[0.07] hover:text-[var(--text)]"
+                    title="Lesson actions"
+                    @click.stop="toggleLessonActions(lesson)"
+                  >
+                    <MoreHorizontal class="size-3.5" />
+                  </button>
+
+                  <div
+                    v-if="lessonActionMenuId === lesson.id"
+                    class="lesson-action-menu absolute bottom-9 right-2 z-20 w-44 overflow-hidden rounded-lg border border-[var(--border)] bg-[#111114]/95 py-1 shadow-2xl shadow-black/40 backdrop-blur-md"
+                    @click.stop
+                  >
+                    <button
+                      class="flex w-full items-center gap-2 px-2.5 py-2 text-left text-[11px] text-[var(--text-muted)] transition-colors hover:bg-white/[0.06] hover:text-[var(--text)] disabled:cursor-not-allowed disabled:opacity-50"
+                      :disabled="tts.generatingLessonIds.value.has(lesson.id)"
+                      @click="openCreateTTSModal(lesson)"
+                    >
+                      <Mic class="size-3.5 text-teal-300" />
+                      <span>{{ tts.cachedLessonIds.value.has(lesson.id) ? 'Regenerate audio' : 'Generate audio' }}</span>
+                    </button>
+                    <button
+                      v-if="tts.cachedLessonIds.value.has(lesson.id)"
+                      class="flex w-full items-center gap-2 px-2.5 py-2 text-left text-[11px] text-[var(--text-muted)] transition-colors hover:bg-white/[0.06] hover:text-[var(--text)]"
+                      @click="clearLessonAudio(lesson)"
+                    >
+                      <RotateCcw class="size-3.5 text-amber-300" />
+                      <span>Clear audio</span>
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </template>
@@ -421,7 +891,7 @@ async function resetAcademy() {
       <div class="flex shrink-0 items-center gap-3 border-b border-[var(--border)] bg-[var(--bg-surface)] px-4 py-2.5">
         <button
           class="flex items-center gap-1 text-[11px] text-[var(--text-faint)] transition-colors hover:text-[var(--text-muted)]"
-          @click="view = 'course'"
+          @click="requestLeaveLesson"
         >
           <ChevronLeft class="size-3.5" />
           Course
@@ -431,9 +901,17 @@ async function resetAcademy() {
           class="text-[10px] font-bold uppercase tracking-widest"
           :class="weekForLesson(currentLesson).color"
         >
-          Day {{ currentLesson.day }}
+          {{ lessonLabel(currentLesson) }}
         </span>
         <h2 class="flex-1 truncate text-sm font-semibold text-[var(--text)]">{{ currentLesson.title }}</h2>
+        <AcademyAudioPlayer
+          v-if="currentAudioUrl"
+          compact
+          class="hidden shrink-0 lg:block"
+          :src="currentAudioUrl"
+          :lesson-title="currentLesson.title"
+          @close="() => { if (currentAudioUrl) { URL.revokeObjectURL(currentAudioUrl); currentAudioUrl = null } }"
+        />
 
         <!-- Completion status -->
         <div class="flex shrink-0 items-center gap-2">
@@ -442,14 +920,9 @@ async function resetAcademy() {
             {{ currentLesson.duration }}
           </span>
           <CheckCircle2 v-if="academy.isCompleted(currentLesson.id)" class="size-4 text-emerald-400" />
-          <button
-            v-else
-            class="flex items-center gap-1.5 rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-300 transition-colors hover:bg-emerald-500/15"
-            @click="markComplete"
-          >
-            <CheckCircle2 class="size-3" />
-            Mark Complete
-          </button>
+          <span v-else class="rounded-lg border border-indigo-500/20 bg-indigo-500/[0.06] px-2.5 py-1 text-[11px] font-medium text-indigo-200/80">
+            Professor-gated
+          </span>
         </div>
 
         <!-- Prev / Next navigation -->
@@ -485,9 +958,14 @@ async function resetAcademy() {
           :class="academy.mode === 'ai-assisted' ? 'border-r border-[var(--border)]' : 'mx-auto max-w-3xl'"
         >
           <!-- Objectives -->
-          <div class="mb-6 rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-4">
-            <p class="mb-2 text-[10px] font-semibold uppercase tracking-widest text-[var(--text-faint)]">
-              Today's Objectives
+          <div
+            class="mb-6 rounded-xl border p-4"
+            :class="isIntroLesson(currentLesson)
+              ? 'border-teal-500/20 bg-teal-500/[0.04]'
+              : 'border-[var(--border)] bg-[var(--bg-card)]'"
+          >
+            <p class="mb-2 text-[10px] font-semibold uppercase tracking-widest" :class="isIntroLesson(currentLesson) ? 'text-teal-400/70' : 'text-[var(--text-faint)]'">
+              {{ isIntroLesson(currentLesson) ? 'Orientation Goals' : "Today's Objectives" }}
             </p>
             <ul class="space-y-1.5">
               <li
@@ -495,7 +973,7 @@ async function resetAcademy() {
                 :key="obj"
                 class="flex items-start gap-2 text-xs text-[var(--text-muted)]"
               >
-                <Target class="mt-0.5 size-3 shrink-0 text-indigo-400" />
+                <Target class="mt-0.5 size-3 shrink-0" :class="isIntroLesson(currentLesson) ? 'text-teal-400' : 'text-indigo-400'" />
                 {{ obj }}
               </li>
             </ul>
@@ -506,7 +984,9 @@ async function resetAcademy() {
 
           <!-- Lab hint -->
           <div v-if="currentLesson.labHint" class="mt-8 rounded-xl border border-amber-500/20 bg-amber-500/[0.06] p-4">
-            <p class="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-amber-400">Lab Exercise</p>
+            <p class="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-amber-400">
+              {{ isIntroLesson(currentLesson) ? 'Try It Out' : 'Lab Exercise' }}
+            </p>
             <p class="text-xs leading-relaxed text-[var(--text-muted)]">{{ currentLesson.labHint }}</p>
           </div>
 
@@ -518,7 +998,7 @@ async function resetAcademy() {
               @click="goToLesson(prevLesson)"
             >
               <ChevronLeft class="size-3.5" />
-              <span>Day {{ prevLesson.day }}: {{ prevLesson.title }}</span>
+              <span>{{ lessonLabel(prevLesson) }}: {{ prevLesson.title }}</span>
             </button>
             <div v-else />
             <button
@@ -526,7 +1006,7 @@ async function resetAcademy() {
               class="flex items-center gap-2 text-xs text-[var(--text-muted)] transition-colors hover:text-[var(--text)]"
               @click="goToLesson(nextLesson)"
             >
-              <span>Day {{ nextLesson.day }}: {{ nextLesson.title }}</span>
+              <span>{{ lessonLabel(nextLesson) }}: {{ nextLesson.title }}</span>
               <ChevronRight class="size-3.5" />
             </button>
           </div>
@@ -548,39 +1028,62 @@ async function resetAcademy() {
 
     <!-- ── CERTIFICATE ─────────────────────────────────────────────────────── -->
     <template v-else-if="view === 'certificate'">
-      <div class="flex h-full items-center justify-center p-8">
-        <div class="w-full max-w-lg space-y-8 text-center">
-          <!-- Certificate card -->
-          <div class="rounded-2xl border border-amber-500/25 bg-amber-500/[0.06] p-8 space-y-4">
-            <div class="mx-auto grid size-20 place-items-center rounded-full border border-amber-500/30 bg-amber-500/15">
+      <div class="flex h-full items-center justify-center overflow-y-auto p-8 custom-scroll">
+        <div class="w-full max-w-5xl space-y-6">
+          <div class="certificate-panel relative overflow-hidden rounded-3xl border border-amber-500/25 bg-[var(--bg-card)] p-8 text-center shadow-2xl shadow-black/30">
+            <div class="pointer-events-none absolute inset-4 rounded-2xl border border-amber-300/20" />
+            <div class="relative mx-auto grid size-20 place-items-center rounded-full border border-amber-500/30 bg-amber-500/15">
               <Award class="size-10 text-amber-300" />
             </div>
-            <div>
-              <p class="text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-400">Certificate of Completion</p>
-              <h1 class="mt-2 text-2xl font-bold text-[var(--text)]">Security Engineering Bootcamp</h1>
-              <p class="mt-1 text-sm text-[var(--text-muted)]">30-Day Cybersecurity Programme</p>
+            <p class="relative mt-6 text-[10px] font-semibold uppercase tracking-[0.28em] text-amber-300">Certificate of Completion</p>
+            <h1 class="relative mt-3 font-display text-4xl font-bold text-[var(--text)]">Vindicta Security Academy</h1>
+            <p class="relative mt-5 text-xs uppercase tracking-[0.18em] text-[var(--text-faint)]">Presented to</p>
+            <p class="relative mt-2 font-display text-3xl font-bold text-white">{{ certificateName }}</p>
+            <p class="relative mx-auto mt-5 max-w-2xl text-sm leading-relaxed text-[var(--text-muted)]">
+              For completing the full security engineering curriculum across foundations, application security, red team practice, defensive operations, secure review, and incident response.
+            </p>
+
+            <div class="relative mt-8 grid gap-3 md:grid-cols-3">
+              <div class="rounded-xl border border-amber-500/20 bg-amber-500/[0.06] p-4">
+                <p class="text-2xl font-bold text-[var(--text)]">{{ TOTAL_DAYS }}</p>
+                <p class="text-[10px] uppercase tracking-widest text-[var(--text-faint)]">Lessons completed</p>
+              </div>
+              <div class="rounded-xl border border-teal-500/20 bg-teal-500/[0.06] p-4">
+                <p class="text-2xl font-bold text-[var(--text)]">100%</p>
+                <p class="text-[10px] uppercase tracking-widest text-[var(--text-faint)]">Professor approved</p>
+              </div>
+              <div class="rounded-xl border border-indigo-500/20 bg-indigo-500/[0.06] p-4">
+                <p class="truncate text-sm font-bold text-[var(--text)]">{{ certificateId }}</p>
+                <p class="text-[10px] uppercase tracking-widest text-[var(--text-faint)]">Credential ID</p>
+              </div>
             </div>
-            <div class="border-t border-amber-500/15 pt-4 space-y-1">
+
+            <div class="relative mt-6 flex flex-wrap justify-center gap-2">
+              <span
+                v-for="skill in certificateSkills"
+                :key="skill"
+                class="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[11px] font-medium text-[var(--text-muted)]"
+              >
+                {{ skill }}
+              </span>
+            </div>
+
+            <div class="relative mt-8 border-t border-white/10 pt-5">
               <p class="text-xs text-[var(--text-faint)]">Issued on</p>
-              <p class="text-sm font-semibold text-[var(--text)]">{{ certDate }}</p>
-            </div>
-            <div class="grid grid-cols-3 gap-3 pt-2">
-              <div class="rounded-lg border border-amber-500/15 p-2">
-                <p class="text-xl font-bold text-[var(--text)]">30</p>
-                <p class="text-[10px] text-[var(--text-faint)]">Days</p>
-              </div>
-              <div class="rounded-lg border border-amber-500/15 p-2">
-                <p class="text-xl font-bold text-[var(--text)]">{{ TOTAL_DAYS }}</p>
-                <p class="text-[10px] text-[var(--text-faint)]">Lessons</p>
-              </div>
-              <div class="rounded-lg border border-amber-500/15 p-2">
-                <p class="text-xl font-bold text-[var(--text)]">100%</p>
-                <p class="text-[10px] text-[var(--text-faint)]">Complete</p>
-              </div>
+              <p class="mt-1 text-sm font-semibold text-[var(--text)]">{{ certDate }}</p>
             </div>
           </div>
 
           <div class="flex justify-center gap-3">
+            <button
+              class="flex items-center gap-2 rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-2.5 text-sm font-semibold text-amber-200 transition-colors hover:bg-amber-500/15 disabled:cursor-not-allowed disabled:opacity-60"
+              :disabled="downloadingCertificate"
+              @click="downloadCertificatePdf"
+            >
+              <Loader2 v-if="downloadingCertificate" class="size-4 animate-spin" />
+              <Download v-else class="size-4" />
+              Download PDF
+            </button>
             <button
               class="flex items-center gap-2 rounded-xl border border-[var(--border)] px-4 py-2.5 text-sm text-[var(--text-muted)] transition-colors hover:bg-white/[0.04] hover:text-[var(--text)]"
               @click="view = 'course'"
@@ -599,10 +1102,319 @@ async function resetAcademy() {
         </div>
       </div>
     </template>
+
+    <!-- ── CREATE TTS MODAL ───────────────────────────────────────────────── -->
+    <GlassModal v-model="showCompletionModal" title="Academy Complete" max-width="lg">
+      <div class="relative overflow-hidden rounded-2xl border border-amber-500/20 bg-[var(--bg-card)] p-6 text-center">
+        <div class="celebration-burst pointer-events-none absolute inset-0" />
+        <div class="pointer-events-none absolute inset-0 overflow-hidden">
+          <span v-for="i in 24" :key="i" class="confetti-piece" :style="confettiStyle(i)" />
+        </div>
+
+        <div class="relative mx-auto grid size-20 place-items-center rounded-full border border-amber-400/30 bg-amber-500/15 shadow-[0_0_40px_rgba(251,191,36,0.22)]">
+          <PartyPopper class="size-10 text-amber-300" />
+        </div>
+        <p class="relative mt-5 text-[10px] font-semibold uppercase tracking-[0.24em] text-amber-200/80">Congratulations</p>
+        <h2 class="relative mt-2 font-display text-3xl font-bold text-[var(--text)]">You completed Vindicta Academy.</h2>
+        <p class="relative mx-auto mt-3 max-w-xl text-sm leading-relaxed text-[var(--text-muted)]">
+          Every lesson is complete and your certificate is ready. Nicely done, {{ certificateName }}.
+        </p>
+
+        <div class="relative mt-6 grid gap-3 sm:grid-cols-3">
+          <div class="rounded-xl border border-amber-500/20 bg-amber-500/[0.06] p-3">
+            <p class="text-xl font-bold text-[var(--text)]">{{ TOTAL_DAYS }}</p>
+            <p class="text-[10px] uppercase tracking-widest text-[var(--text-faint)]">Lessons</p>
+          </div>
+          <div class="rounded-xl border border-teal-500/20 bg-teal-500/[0.06] p-3">
+            <p class="text-xl font-bold text-[var(--text)]">100%</p>
+            <p class="text-[10px] uppercase tracking-widest text-[var(--text-faint)]">Approved</p>
+          </div>
+          <div class="rounded-xl border border-indigo-500/20 bg-indigo-500/[0.06] p-3">
+            <Sparkles class="mx-auto size-5 text-indigo-300" />
+            <p class="mt-1 text-[10px] uppercase tracking-widest text-[var(--text-faint)]">Certificate</p>
+          </div>
+        </div>
+
+        <div class="relative mt-6 flex flex-wrap justify-center gap-2">
+          <button
+            class="inline-flex items-center gap-2 rounded-xl bg-indigo-600/85 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-600"
+            @click="showCertificate"
+          >
+            <Award class="size-4" />
+            View Certificate
+          </button>
+          <button
+            class="inline-flex items-center gap-2 rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-2.5 text-sm font-semibold text-amber-200 transition-colors hover:bg-amber-500/15 disabled:cursor-not-allowed disabled:opacity-60"
+            :disabled="downloadingCertificate"
+            @click="downloadCertificatePdf"
+          >
+            <Loader2 v-if="downloadingCertificate" class="size-4 animate-spin" />
+            <Download v-else class="size-4" />
+            Download PDF
+          </button>
+        </div>
+      </div>
+    </GlassModal>
+
+    <GlassModal v-model="showLeaveLessonModal" title="Leave Lesson?" max-width="sm">
+      <div class="space-y-4 p-1">
+        <div class="flex items-start gap-3 rounded-lg border border-amber-500/20 bg-amber-500/[0.06] px-3 py-3">
+          <div class="grid size-8 shrink-0 place-items-center rounded-lg border border-amber-500/25 bg-amber-500/10">
+            <AlertTriangle class="size-4 text-amber-300" />
+          </div>
+          <div class="min-w-0">
+            <p class="text-sm font-semibold text-[var(--text)]">You are leaving the lesson.</p>
+            <p class="mt-1 text-xs leading-relaxed text-[var(--text-muted)]">
+              Your progress and chat history are saved, but the lesson view will close and you will return to the course list.
+            </p>
+          </div>
+        </div>
+
+        <div class="flex gap-2 pt-1">
+          <GlassButton class="flex-1" variant="ghost" @click="showLeaveLessonModal = false">
+            Stay in Lesson
+          </GlassButton>
+          <GlassButton class="flex-1" @click="confirmLeaveLesson">
+            Leave Lesson
+          </GlassButton>
+        </div>
+      </div>
+    </GlassModal>
+
+    <GlassModal v-model="showTTSModal" title="Create Narration" max-width="sm">
+      <div class="space-y-4 p-1">
+        <!-- Timing notice -->
+        <div class="flex items-start gap-2.5 rounded-lg border border-amber-500/20 bg-amber-500/[0.06] px-3 py-2.5">
+          <Clock class="mt-0.5 size-3.5 shrink-0 text-amber-400" />
+          <div class="space-y-1 text-[11px] leading-relaxed text-[var(--text-muted)]">
+            <p>
+              <strong class="text-[var(--text)]">First time:</strong> Kokoro TTS model must load into memory - this can take 5-15 minutes. Subsequent narrations generate faster.
+            </p>
+            <p>You can start audio for multiple lessons, including locked lessons. Vindicta tracks them separately and safely queues the shared speech engine.</p>
+          </div>
+        </div>
+
+        <!-- Lesson name -->
+        <div v-if="ttsModalLesson" class="rounded-lg border border-[var(--border)] bg-white/[0.03] px-3 py-2">
+          <p class="text-[9px] font-semibold uppercase tracking-widest text-[var(--text-faint)]">Lesson</p>
+          <p class="mt-0.5 text-xs font-semibold text-[var(--text)]">{{ ttsModalLesson.title }}</p>
+        </div>
+
+        <!-- AI model picker for script generation -->
+        <div class="space-y-2">
+          <p class="text-[10px] font-semibold uppercase tracking-widest text-[var(--text-faint)]">Script generated by</p>
+          <div class="grid gap-2">
+            <button
+              v-for="opt in ttsModelOptions"
+              :key="opt.id"
+              class="rounded-xl border p-3 text-left transition-all"
+              :class="ttsModalModel === opt.id
+                ? 'border-teal-500/30 bg-teal-500/10'
+                : 'border-[var(--border)] hover:border-teal-500/20 hover:bg-white/[0.02]'"
+              @click="ttsModalModel = opt.id"
+            >
+              <p class="text-xs font-semibold text-[var(--text)]">{{ opt.label }}</p>
+              <p class="mt-0.5 text-[10px] text-[var(--text-faint)]">{{ opt.description }}</p>
+            </button>
+          </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="flex gap-2 pt-1">
+          <GlassButton class="flex-1" @click="confirmCreateTTS">
+            <Mic class="size-3.5" />
+            Generate Narration
+          </GlassButton>
+          <GlassButton variant="ghost" @click="showTTSModal = false">
+            Cancel
+          </GlassButton>
+        </div>
+      </div>
+    </GlassModal>
   </div>
 </template>
 
 <style scoped>
+.academy-page {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.academy-page :deep(input),
+.academy-page :deep(textarea),
+.academy-page :deep([contenteditable='true']) {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.academy-lesson-card {
+  border-color: rgba(var(--lesson-accent), 0.22);
+  background:
+    radial-gradient(circle at 85% 12%, rgba(var(--lesson-glow), 0.16), transparent 34%),
+    linear-gradient(135deg, rgba(var(--lesson-wash), 0.10), rgba(255,255,255,0.018) 42%, rgba(0,0,0,0.10));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+}
+
+.academy-lesson-card::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  z-index: 1;
+  border-radius: inherit;
+  background: linear-gradient(120deg, transparent 12%, rgba(var(--lesson-shine), 0.55), transparent 44%);
+  opacity: 0;
+  transform: translateX(-35%);
+  transition: opacity 180ms ease, transform 500ms ease;
+  pointer-events: none;
+}
+
+.academy-lesson-card::after {
+  content: '';
+  position: absolute;
+  inset: 1px;
+  z-index: 0;
+  border-radius: calc(0.75rem - 1px);
+  background: rgba(10,10,14,0.72);
+  pointer-events: none;
+}
+
+.academy-lesson-card > * {
+  z-index: 2;
+}
+
+.academy-lesson-card .lesson-action-menu {
+  z-index: 30;
+}
+
+.academy-lesson-card.is-open:hover,
+.academy-lesson-card.is-current {
+  border-color: rgba(var(--lesson-accent), 0.52);
+  box-shadow:
+    0 16px 34px rgba(0,0,0,0.22),
+    0 0 0 1px rgba(var(--lesson-accent), 0.08),
+    0 0 28px rgba(var(--lesson-glow), 0.16);
+  transform: translateY(-1px);
+}
+
+.academy-lesson-card.is-open:hover::before,
+.academy-lesson-card.is-current::before {
+  opacity: 0.75;
+  transform: translateX(24%);
+}
+
+.academy-lesson-card.is-current {
+  animation: academy-card-pulse 3.6s ease-in-out infinite;
+}
+
+.academy-lesson-card.is-complete {
+  border-color: rgba(52, 211, 153, 0.34);
+  background:
+    radial-gradient(circle at 85% 12%, rgba(52, 211, 153, 0.16), transparent 34%),
+    linear-gradient(135deg, rgba(16, 185, 129, 0.11), rgba(255,255,255,0.018) 42%, rgba(0,0,0,0.10));
+}
+
+.academy-lesson-card.is-locked {
+  border-color: rgba(255,255,255,0.08);
+  background: linear-gradient(135deg, rgba(255,255,255,0.035), rgba(255,255,255,0.012));
+}
+
+@keyframes academy-card-pulse {
+  0%, 100% {
+    box-shadow:
+      0 16px 34px rgba(0,0,0,0.22),
+      0 0 0 1px rgba(var(--lesson-accent), 0.08),
+      0 0 18px rgba(var(--lesson-glow), 0.11);
+  }
+  50% {
+    box-shadow:
+      0 16px 34px rgba(0,0,0,0.22),
+      0 0 0 1px rgba(var(--lesson-accent), 0.16),
+      0 0 34px rgba(var(--lesson-glow), 0.22);
+  }
+}
+
+.academy-roadmap-hero {
+  position: relative;
+  isolation: isolate;
+}
+
+.academy-roadmap-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    linear-gradient(120deg, rgba(45,212,191,0.12), transparent 36%),
+    radial-gradient(circle at 88% 18%, rgba(129,140,248,0.18), transparent 32%),
+    radial-gradient(circle at 24% 90%, rgba(196,181,253,0.10), transparent 28%);
+}
+
+.certificate-panel {
+  isolation: isolate;
+}
+
+.certificate-panel::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(251,191,36,0.18), transparent 32%),
+    linear-gradient(135deg, rgba(20,184,166,0.10), transparent 36%, rgba(99,102,241,0.12));
+}
+
+.celebration-burst {
+  background:
+    radial-gradient(circle at 18% 18%, rgba(45,212,191,0.26), transparent 22%),
+    radial-gradient(circle at 82% 20%, rgba(251,191,36,0.24), transparent 24%),
+    radial-gradient(circle at 50% 96%, rgba(129,140,248,0.24), transparent 30%);
+  animation: celebration-glow 2.4s ease-in-out infinite;
+}
+
+.confetti-piece {
+  position: absolute;
+  top: -12px;
+  left: calc(4% + var(--fall-x));
+  width: 7px;
+  height: 14px;
+  border-radius: 2px;
+  background: hsl(calc(var(--i) * 31deg), 88%, 66%);
+  opacity: 0;
+  transform: translateY(-20px) rotate(0deg);
+  animation: confetti-fall 2.9s cubic-bezier(.21,.61,.35,1) infinite;
+  animation-delay: calc(var(--i) * -0.11s);
+}
+
+.confetti-piece:nth-child(3n) {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+}
+
+.confetti-piece:nth-child(4n) {
+  width: 12px;
+  height: 5px;
+}
+
+@keyframes celebration-glow {
+  0%, 100% { opacity: 0.78; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.03); }
+}
+
+@keyframes confetti-fall {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, -24px, 0) rotate(0deg);
+  }
+  12% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(calc((var(--i) - 12) * 7px), 430px, 0) rotate(calc(var(--i) * 54deg));
+  }
+}
+
 .prose-lesson :deep(h1) {
   font-size: 1.25rem;
   font-weight: 700;

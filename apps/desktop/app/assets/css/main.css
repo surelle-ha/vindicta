@@ -174,4 +174,11 @@
     border-radius: 0.75rem;
     padding: 1rem;
   }
+
+  /* Display / serif font for brand headings and titles */
+  .font-display {
+    font-family: "Playfair Display", Georgia, "Times New Roman", serif;
+    font-feature-settings: "liga" 1, "kern" 1;
+    letter-spacing: -0.01em;
+  }
 }

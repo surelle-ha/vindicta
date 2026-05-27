@@ -32,7 +32,7 @@ export default defineNuxtConfig({
         { rel: 'apple-touch-icon', href: '/icon.png' },
         { rel: 'preconnect', href: 'https://fonts.googleapis.com' },
         { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: '' },
-        { rel: 'stylesheet', href: 'https://fonts.googleapis.com/css2?family=Ubuntu:ital,wght@0,300;0,400;0,500;0,700;1,300;1,400;1,500;1,700&display=swap' },
+        { rel: 'stylesheet', href: 'https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Ubuntu:ital,wght@0,300;0,400;0,500;0,700;1,300;1,400;1,500;1,700&display=swap' },
       ],
     },
   },
@@ -41,6 +41,10 @@ export default defineNuxtConfig({
     plugins: [tailwindcss()],
     clearScreen: false,
     envPrefix: ['VITE_', 'TAURI_'],
+    // Required for Kokoro TTS web worker (ONNX inference in a background thread)
+    worker: {
+      format: 'es',
+    },
     optimizeDeps: {
       exclude: [
         '@tauri-apps/api',
@@ -48,6 +52,10 @@ export default defineNuxtConfig({
         '@tauri-apps/plugin-dialog',
         '@tauri-apps/plugin-fs',
         '@tauri-apps/plugin-store',
+        // Kokoro TTS and its deps — large/complex packages served as-is
+        'kokoro-js',
+        '@huggingface/transformers',
+        'phonemizer',
       ],
     },
   },

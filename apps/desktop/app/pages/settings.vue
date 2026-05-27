@@ -1,19 +1,302 @@
 <script setup lang="ts">
-import { Sun, Moon, Database, ChevronDown, ChevronUp, Stethoscope, CheckCircle2, AlertTriangle, XCircle, Wrench, Loader2, Terminal, Download, Github, Heart, Send, Bug, Lightbulb, Sparkles, Eye, Plug } from 'lucide-vue-next'
+import { Sun, Moon, Database, ChevronDown, ChevronUp, Stethoscope, CheckCircle2, AlertTriangle, XCircle, Wrench, Loader2, Terminal, Download, Github, Heart, Eye, Plug, Zap, Rss, Plus, Trash2 } from 'lucide-vue-next'
 
 const app = useAppStore()
 const user = useUserStore()
 const projects = useProjectsStore()
+const academy = useAcademyStore()
 const router = useRouter()
 const { notify } = useNotifications()
+
+type SettingsTab = 'general' | 'news' | 'wsl' | 'updates' | 'diagnostics' | 'data'
+const activeSettingsTab = ref<SettingsTab>('general')
+const settingsTabs: { id: SettingsTab; label: string; description: string }[] = [
+  { id: 'general', label: 'General', description: 'Theme, startup, navigation, and notifications' },
+  { id: 'news', label: 'News', description: 'Security RSS sources for Home' },
+  { id: 'wsl', label: 'WSL', description: 'Backend profiles and cleanup' },
+  { id: 'updates', label: 'Updates', description: 'Version, releases, and app information' },
+  { id: 'diagnostics', label: 'Doctor', description: 'Local tooling health checks' },
+  { id: 'data', label: 'Data', description: 'Raw data and reset actions' },
+]
 
 // Notifications
 const notifs = ref(app.notificationsEnabled)
 watch(notifs, (v) => app.setNotifications(v))
 
+// Startup
+const autoStart = ref(false)
+const autoStartLoading = ref(false)
+
+async function loadAutoStart() {
+  autoStartLoading.value = true
+  try {
+    const { invoke } = await import('@tauri-apps/api/core')
+    autoStart.value = await invoke<boolean>('auto_start_enabled')
+  }
+  catch {
+    autoStart.value = false
+  }
+  finally {
+    autoStartLoading.value = false
+  }
+}
+
+async function setAutoStartPreference(value: boolean) {
+  autoStartLoading.value = true
+  try {
+    const { invoke } = await import('@tauri-apps/api/core')
+    autoStart.value = await invoke<boolean>('set_auto_start', { enabled: value })
+    notify(autoStart.value ? 'Vindicta will start after boot.' : 'Boot startup disabled.', 'success')
+  }
+  catch (e: any) {
+    autoStart.value = !value
+    notify(e?.message ?? 'Could not update boot startup.', 'error')
+  }
+  finally {
+    autoStartLoading.value = false
+  }
+}
+
 // MCP in sidebar
 const mcpInSidebar = ref(app.mcpInSidebar)
 watch(mcpInSidebar, (v) => app.setMcpInSidebar(v))
+
+// RSS sources
+const rssDrafts = ref(app.rssSources.map(source => ({ ...source })))
+
+watch(() => app.rssSources, (sources) => {
+  rssDrafts.value = sources.map(source => ({ ...source }))
+}, { deep: true })
+
+function addRssSource() {
+  rssDrafts.value.push({
+    id: `custom-${Date.now()}`,
+    label: 'Security Feed',
+    url: '',
+    enabled: true,
+  })
+}
+
+function removeRssSource(id: string) {
+  rssDrafts.value = rssDrafts.value.filter(source => source.id !== id)
+}
+
+async function saveRssSources() {
+  const sources = rssDrafts.value
+    .map(source => ({
+      ...source,
+      label: source.label.trim() || 'Security Feed',
+      url: source.url.trim(),
+    }))
+    .filter(source => source.url)
+  await app.setRssSources(sources)
+  notify('RSS sources saved.', 'success')
+}
+
+// WSL
+interface WslDistro {
+  name: string
+  state: string
+  version: string
+  default: boolean
+}
+
+interface WslInfo {
+  installed: boolean
+  version: string
+  defaultDistro: string
+  distributions: WslDistro[]
+  error?: string | null
+}
+
+const wslLoading = ref(false)
+const wslPurging = ref(false)
+const wslCleaningProfiles = ref(false)
+const wslStarting = ref(false)
+const wslPreparingPentest = ref(false)
+const wslInfo = ref<WslInfo | null>(null)
+const purgeDistro = ref('')
+const confirmWslPurge = ref(false)
+const cleanProfilesDistro = ref('')
+const confirmCleanProfiles = ref(false)
+const wslAutoStart = ref(app.wslAutoStart)
+
+watch(wslAutoStart, (value) => app.setWslAutoStart(value))
+
+const wslStatusText = computed(() => {
+  if (wslLoading.value) return 'Checking WSL...'
+  if (!wslInfo.value?.installed) return 'WSL is not installed or not available.'
+  const count = wslInfo.value.distributions.length
+  return `${wslInfo.value.version || 'WSL'} with ${count} distribution${count === 1 ? '' : 's'}.`
+})
+
+async function refreshWslInfo() {
+  wslLoading.value = true
+  try {
+    const { invoke } = await import('@tauri-apps/api/core')
+    wslInfo.value = await invoke<WslInfo>('wsl_info')
+    const defaultDistro = wslInfo.value.defaultDistro || wslInfo.value.distributions[0]?.name || ''
+    if (!purgeDistro.value) purgeDistro.value = defaultDistro
+    if (!cleanProfilesDistro.value) cleanProfilesDistro.value = defaultDistro
+    if (wslInfo.value.installed) await app.ensureDefaultWslProfiles(defaultDistro)
+  }
+  catch (e: any) {
+    wslInfo.value = {
+      installed: false,
+      version: '',
+      defaultDistro: '',
+      distributions: [],
+      error: e?.message ?? String(e),
+    }
+  }
+  finally {
+    wslLoading.value = false
+  }
+}
+
+async function startEnabledWslProfiles(showToast = true) {
+  const profiles = app.wslProfiles.filter(profile => profile.enabled)
+  if (!profiles.length) return
+  wslStarting.value = true
+  try {
+    const { invoke } = await import('@tauri-apps/api/core')
+    await Promise.all(profiles.map(profile => invoke('wsl_start_distribution', { name: profile.distro || wslInfo.value?.defaultDistro || '' })))
+    if (showToast) notify('Enabled WSL profiles are running in the background.', 'success')
+    await refreshWslInfo()
+  }
+  catch (e: any) {
+    notify(e?.message ?? 'Could not start WSL in the background.', 'error')
+  }
+  finally {
+    wslStarting.value = false
+  }
+}
+
+async function preparePentestWslAccount() {
+  const profile = app.wslProfiles.find(item => item.id === 'pentest')
+  if (!profile?.enabled) return
+  wslPreparingPentest.value = true
+  try {
+    const { invoke } = await import('@tauri-apps/api/core')
+    await invoke('wsl_ensure_pentest_backend', { distro: profile.distro || wslInfo.value?.defaultDistro || '' })
+    notify('Pentest WSL account is ready.', 'success')
+    await refreshWslInfo()
+  }
+  catch (e: any) {
+    notify(e?.message ?? 'Could not prepare the pentest WSL account.', 'error')
+  }
+  finally {
+    wslPreparingPentest.value = false
+  }
+}
+
+async function cleanVindictaProfiles() {
+  if (!cleanProfilesDistro.value || !confirmCleanProfiles.value) return
+  wslCleaningProfiles.value = true
+  try {
+    const { invoke } = await import('@tauri-apps/api/core')
+    const result = await invoke<string>('wsl_purge_vindicta_profiles', { distro: cleanProfilesDistro.value })
+    notify(result || 'Vindicta profiles removed from WSL.', 'success')
+    confirmCleanProfiles.value = false
+    await refreshWslInfo()
+  }
+  catch (e: any) {
+    notify(e?.message ?? 'Could not clean Vindicta profiles.', 'error')
+  }
+  finally {
+    wslCleaningProfiles.value = false
+  }
+}
+
+async function purgeSelectedWsl() {
+  if (!purgeDistro.value || !confirmWslPurge.value) return
+  wslPurging.value = true
+  try {
+    const { invoke } = await import('@tauri-apps/api/core')
+    await invoke('wsl_unregister_distribution', { name: purgeDistro.value })
+    notify(`${purgeDistro.value} was unregistered from WSL.`, 'success')
+    purgeDistro.value = ''
+    confirmWslPurge.value = false
+    await refreshWslInfo()
+  }
+  catch (e: any) {
+    notify(e?.message ?? 'Could not unregister WSL distribution.', 'error')
+  }
+  finally {
+    wslPurging.value = false
+  }
+}
+
+async function saveWslProfileDistro(index: number, distro: string) {
+  const next = app.wslProfiles.map((profile, i) => i === index ? { ...profile, distro } : profile)
+  await app.setWslProfiles(next)
+}
+
+async function saveWslProfileEnabled(index: number, enabled: boolean) {
+  const next = app.wslProfiles.map((profile, i) => i === index ? { ...profile, enabled } : profile)
+  await app.setWslProfiles(next)
+}
+
+// Updates
+const appVersion = ref('')
+const updateChecking = ref(false)
+const updateError = ref('')
+const latestRelease = ref<{ tagName: string; htmlUrl: string; name: string } | null>(null)
+
+const hasUpdate = computed(() => {
+  if (!appVersion.value || !latestRelease.value?.tagName) return false
+  return compareVersions(normalizeVersion(latestRelease.value.tagName), normalizeVersion(appVersion.value)) > 0
+})
+
+function normalizeVersion(value: string) {
+  return value.trim().replace(/^v/i, '')
+}
+
+function compareVersions(a: string, b: string) {
+  const left = a.split(/[.-]/).map(part => Number.parseInt(part, 10) || 0)
+  const right = b.split(/[.-]/).map(part => Number.parseInt(part, 10) || 0)
+  for (let i = 0; i < Math.max(left.length, right.length); i++) {
+    const diff = (left[i] ?? 0) - (right[i] ?? 0)
+    if (diff !== 0) return diff
+  }
+  return 0
+}
+
+async function checkForUpdates() {
+  updateChecking.value = true
+  updateError.value = ''
+  try {
+    const { getVersion } = await import('@tauri-apps/api/app')
+    appVersion.value = await getVersion()
+  }
+  catch {
+    appVersion.value = '0.1.0'
+  }
+
+  try {
+    const response = await fetch('https://api.github.com/repos/surelle-ha/vindicta/releases/latest', {
+      headers: { Accept: 'application/vnd.github+json' },
+    })
+    if (!response.ok) throw new Error(`GitHub returned HTTP ${response.status}`)
+    const release = await response.json()
+    latestRelease.value = {
+      tagName: String(release.tag_name ?? ''),
+      htmlUrl: String(release.html_url ?? 'https://github.com/surelle-ha/vindicta/releases'),
+      name: String(release.name ?? release.tag_name ?? 'Latest release'),
+    }
+  }
+  catch (e: any) {
+    updateError.value = e?.message ?? 'Could not check GitHub releases.'
+  }
+  finally {
+    updateChecking.value = false
+  }
+}
+
+async function openLatestRelease() {
+  const { open } = await import('@tauri-apps/plugin-shell')
+  await open(latestRelease.value?.htmlUrl || 'https://github.com/surelle-ha/vindicta/releases')
+}
 
 // Vigilante
 const vigilanteWarningOpen = ref(false)
@@ -38,110 +321,6 @@ function confirmVigilante() {
 
 function cancelVigilante() {
   vigilanteWarningOpen.value = false
-}
-
-// Contact
-const contactType = ref<'bug' | 'suggestion' | 'feature'>('bug')
-const contactTitle = ref('')
-const contactBody = ref('')
-const contactEmail = ref('')
-const contactRepo = ref(app.contact.githubRepo)
-const contactToken = ref(app.contact.githubToken)
-const contactSubmitting = ref(false)
-const showContactConfig = ref(false)
-
-const contactTypes = [
-  { id: 'bug' as const, label: 'Bug', icon: Bug, labelName: 'type:bug' },
-  { id: 'suggestion' as const, label: 'Suggestion', icon: Lightbulb, labelName: 'type:suggestion' },
-  { id: 'feature' as const, label: 'Feature', icon: Sparkles, labelName: 'type:feature' },
-]
-
-const selectedContactType = computed(() =>
-  contactTypes.find(type => type.id === contactType.value) ?? contactTypes[0]!,
-)
-
-const canSubmitContact = computed(() =>
-  Boolean(contactTitle.value.trim() && contactBody.value.trim() && contactRepo.value.trim()),
-)
-
-function issueBody() {
-  return [
-    contactBody.value.trim(),
-    '',
-    '---',
-    `Submitted from Vindicta desktop settings.`,
-    contactEmail.value.trim() ? `Contact: ${contactEmail.value.trim()}` : '',
-  ].filter(Boolean).join('\n')
-}
-
-function issueUrl() {
-  const repo = contactRepo.value.trim() || 'Surelle-ha/vindicta'
-  const query = new URLSearchParams({
-    title: `[${selectedContactType.value.label}] ${contactTitle.value.trim() || 'Vindicta feedback'}`,
-    body: issueBody(),
-    labels: selectedContactType.value.labelName,
-  })
-  return `https://github.com/${repo}/issues/new?${query.toString()}`
-}
-
-async function saveContactSettings() {
-  await app.setContact({
-    githubRepo: contactRepo.value.trim() || 'Surelle-ha/vindicta',
-    githubToken: contactToken.value.trim(),
-  })
-  notify('Contact settings saved.', 'success')
-}
-
-async function openIssueInBrowser() {
-  const { open } = await import('@tauri-apps/plugin-shell')
-  await open(issueUrl())
-}
-
-async function submitGitHubIssue() {
-  if (!canSubmitContact.value) {
-    notify('Add a title, details, and GitHub repo before submitting.', 'warning')
-    return
-  }
-  const repo = contactRepo.value.trim()
-  const token = contactToken.value.trim()
-  if (!token) {
-    notify('Add a GitHub token or open the prefilled issue in your browser.', 'warning')
-    return
-  }
-
-  contactSubmitting.value = true
-  try {
-    await saveContactSettings()
-    const response = await fetch(`https://api.github.com/repos/${repo}/issues`, {
-      method: 'POST',
-      headers: {
-        Accept: 'application/vnd.github+json',
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        'X-GitHub-Api-Version': '2022-11-28',
-      },
-      body: JSON.stringify({
-        title: `[${selectedContactType.value.label}] ${contactTitle.value.trim()}`,
-        body: issueBody(),
-        labels: [selectedContactType.value.labelName, 'vindicta-feedback'],
-      }),
-    })
-
-    if (!response.ok) {
-      const detail = await response.text().catch(() => '')
-      throw new Error(detail || `GitHub returned HTTP ${response.status}`)
-    }
-
-    contactTitle.value = ''
-    contactBody.value = ''
-    notify('GitHub issue submitted.', 'success')
-  }
-  catch (e: any) {
-    notify(e?.message ?? 'Could not submit GitHub issue.', 'error')
-  }
-  finally {
-    contactSubmitting.value = false
-  }
 }
 
 // Doctor
@@ -366,15 +545,23 @@ const rawData = computed(() => JSON.stringify({
   appSettings: {
     theme: app.theme,
     notificationsEnabled: app.notificationsEnabled,
+    wslAutoStart: app.wslAutoStart,
     contact: {
       githubRepo: app.contact.githubRepo,
       githubToken: app.contact.githubToken ? 'saved locally' : '',
     },
+    openRouter: {
+      enabled: app.openRouter.enabled,
+      apiKey: app.openRouter.apiKey ? 'saved locally' : '',
+      model: app.openRouter.model,
+    },
+    wslProfiles: app.wslProfiles,
+    rssSources: app.rssSources,
   },
 }, null, 2))
 
 // Danger zone confirms
-const confirmReset = ref<null | 'profile' | 'projects' | 'all'>(null)
+const confirmReset = ref<null | 'profile' | 'projects' | 'academy' | 'all'>(null)
 
 async function resetProfile() {
   await user.reset()
@@ -386,6 +573,13 @@ async function clearProjects() {
   projects.projects = []
   await projects.saveProjects()
   confirmReset.value = null
+}
+
+async function resetAcademyProgress() {
+  await academy.loadFromDisk()
+  await academy.resetProgress(false)
+  confirmReset.value = null
+  notify('Academy progress and enrollment were reset.', 'success')
 }
 
 async function resetAll() {
@@ -408,17 +602,41 @@ async function resetAll() {
   router.push('/')
   window.location.reload()
 }
+
+onMounted(() => {
+  void loadAutoStart()
+  void (async () => {
+    await refreshWslInfo()
+    if (app.wslAutoStart) await startEnabledWslProfiles(false)
+  })()
+  void checkForUpdates()
+})
 </script>
 
 <template>
-  <div class="max-w-xl mx-auto py-8 px-6 space-y-8">
+  <div class="max-w-3xl mx-auto py-8 px-6 space-y-8">
     <div>
       <h2 class="text-sm font-semibold text-[var(--text)] tracking-tight">Settings</h2>
       <p class="text-xs text-[var(--text-muted)] mt-0.5">App configuration and preferences</p>
     </div>
 
+    <div class="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-1.5">
+      <div class="grid gap-1 sm:grid-cols-3 lg:grid-cols-6">
+        <button
+          v-for="tab in settingsTabs"
+          :key="tab.id"
+          class="rounded-lg px-3 py-2 text-left transition-colors"
+          :class="activeSettingsTab === tab.id ? 'bg-indigo-500/15 text-indigo-200' : 'text-[var(--text-muted)] hover:bg-white/[0.05] hover:text-[var(--text)]'"
+          @click="activeSettingsTab = tab.id"
+        >
+          <span class="block text-xs font-semibold">{{ tab.label }}</span>
+          <span class="mt-0.5 block truncate text-[10px] opacity-70">{{ tab.description }}</span>
+        </button>
+      </div>
+    </div>
+
     <!-- General -->
-    <div class="space-y-3">
+    <div v-show="activeSettingsTab === 'general'" class="space-y-3">
       <h3 class="text-[10px] font-semibold text-[var(--text-faint)] uppercase tracking-[0.12em]">General</h3>
       <div class="p-4 rounded-xl bg-[var(--bg-card)] border border-[var(--border)] space-y-4">
         <!-- Theme -->
@@ -432,6 +650,31 @@ async function resetAll() {
             <Moon v-else class="size-3.5 mr-1.5" />
             {{ app.theme === 'dark' ? 'Light' : 'Dark' }}
           </GlassButton>
+        </div>
+
+        <div class="h-px bg-[var(--border)]" />
+
+        <!-- Auto-start -->
+        <div class="flex items-center justify-between">
+          <div class="flex items-start gap-3">
+            <div class="mt-0.5 grid size-7 shrink-0 place-items-center rounded-lg border border-emerald-500/20 bg-emerald-500/10">
+              <Zap class="size-3.5 text-emerald-300" />
+            </div>
+            <div>
+              <p class="text-sm text-[var(--text)]">Start after boot</p>
+              <p class="text-xs text-[var(--text-muted)] mt-0.5">Launch Vindicta automatically when Windows starts</p>
+            </div>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer shrink-0 ml-4">
+            <input
+              :checked="autoStart"
+              :disabled="autoStartLoading"
+              type="checkbox"
+              class="sr-only peer"
+              @change="setAutoStartPreference(($event.target as HTMLInputElement).checked)"
+            >
+            <div class="w-9 h-5 bg-white/10 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white/40 after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600 peer-checked:after:bg-white" />
+          </label>
         </div>
 
         <div class="h-px bg-[var(--border)]" />
@@ -528,7 +771,7 @@ async function resetAll() {
     </GlassModal>
 
     <!-- Notifications -->
-    <div class="space-y-3">
+    <div v-show="activeSettingsTab === 'general'" class="space-y-3">
       <h3 class="text-[10px] font-semibold text-[var(--text-faint)] uppercase tracking-[0.12em]">Notifications</h3>
       <div class="p-4 rounded-xl bg-[var(--bg-card)] border border-[var(--border)] space-y-4">
         <div class="flex items-center justify-between">
@@ -545,8 +788,264 @@ async function resetAll() {
       </div>
     </div>
 
+    <!-- RSS Sources -->
+    <div v-show="activeSettingsTab === 'news'" class="space-y-3">
+      <div class="flex items-center justify-between">
+        <h3 class="text-[10px] font-semibold text-[var(--text-faint)] uppercase tracking-[0.12em]">Security News Sources</h3>
+        <GlassButton variant="ghost" size="sm" @click="addRssSource">
+          <Plus class="size-3.5" />
+          Add
+        </GlassButton>
+      </div>
+      <div class="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-4 space-y-3">
+        <div class="flex items-start gap-3 rounded-lg border border-cyan-500/20 bg-cyan-500/[0.06] p-3">
+          <Rss class="mt-0.5 size-4 shrink-0 text-cyan-300" />
+          <p class="text-xs leading-relaxed text-[var(--text-muted)]">These feeds power the Home news section. Disable a source to hide it without deleting the URL.</p>
+        </div>
+
+        <div class="space-y-3">
+          <div
+            v-for="source in rssDrafts"
+            :key="source.id"
+            class="rounded-xl border border-white/10 bg-black/10 p-3"
+          >
+            <div class="flex items-center gap-2">
+              <label class="relative inline-flex cursor-pointer items-center">
+                <input v-model="source.enabled" type="checkbox" class="sr-only peer">
+                <div class="h-5 w-9 rounded-full bg-white/10 after:absolute after:left-0.5 after:top-0.5 after:size-4 after:rounded-full after:bg-white/40 after:transition-all after:content-[''] peer-checked:bg-cyan-600 peer-checked:after:translate-x-full peer-checked:after:bg-white" />
+              </label>
+              <input
+                v-model="source.label"
+                class="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-white/[0.04] px-3 py-2 text-xs text-[var(--text)] outline-none transition-colors focus:border-cyan-500/40"
+                placeholder="Feed label"
+              >
+              <button
+                class="grid size-8 shrink-0 place-items-center rounded-lg text-[var(--text-faint)] transition-colors hover:bg-red-500/10 hover:text-red-300"
+                title="Remove source"
+                @click="removeRssSource(source.id)"
+              >
+                <Trash2 class="size-3.5" />
+              </button>
+            </div>
+            <input
+              v-model="source.url"
+              class="mt-2 w-full rounded-lg border border-[var(--border)] bg-white/[0.04] px-3 py-2 font-mono text-[11px] text-[var(--text-muted)] outline-none transition-colors focus:border-cyan-500/40"
+              placeholder="https://example.com/rss"
+            >
+          </div>
+        </div>
+
+        <GlassButton size="sm" class="w-full" @click="saveRssSources">
+          Save News Sources
+        </GlassButton>
+      </div>
+    </div>
+
+    <!-- WSL -->
+    <div v-show="activeSettingsTab === 'wsl'" class="space-y-3">
+      <h3 class="text-[10px] font-semibold text-[var(--text-faint)] uppercase tracking-[0.12em]">WSL Backend</h3>
+      <div class="p-4 rounded-xl bg-[var(--bg-card)] border border-[var(--border)] space-y-4">
+        <div class="flex items-start justify-between gap-4">
+          <div class="flex items-start gap-3">
+            <div
+              class="mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg border"
+              :class="wslInfo?.installed ? 'border-emerald-500/20 bg-emerald-500/10' : 'border-amber-500/20 bg-amber-500/10'"
+            >
+              <Terminal class="size-4" :class="wslInfo?.installed ? 'text-emerald-300' : 'text-amber-300'" />
+            </div>
+            <div>
+              <p class="text-sm font-semibold text-[var(--text)]">Windows Subsystem for Linux</p>
+              <p class="mt-1 text-xs leading-relaxed text-[var(--text-muted)]">{{ wslStatusText }}</p>
+              <p v-if="wslInfo?.error" class="mt-1 text-xs text-amber-300">{{ wslInfo.error }}</p>
+            </div>
+          </div>
+          <GlassButton variant="ghost" size="sm" :disabled="wslLoading" @click="refreshWslInfo">
+            <Loader2 v-if="wslLoading" class="size-3.5 animate-spin" />
+            <Stethoscope v-else class="size-3.5" />
+            Check
+          </GlassButton>
+        </div>
+
+        <div v-if="wslInfo?.installed" class="space-y-3">
+          <div class="grid gap-2 rounded-lg border border-emerald-500/15 bg-emerald-500/[0.04] p-3">
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <p class="text-xs font-semibold text-[var(--text)]">Background backend</p>
+                <p class="mt-0.5 text-[11px] leading-relaxed text-[var(--text-muted)]">Keep enabled WSL profiles warm so Academy and Pentest can connect without opening a separate terminal first.</p>
+              </div>
+              <label class="relative inline-flex items-center cursor-pointer shrink-0">
+                <input v-model="wslAutoStart" type="checkbox" class="sr-only peer">
+                <div class="w-9 h-5 bg-white/10 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white/40 after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600 peer-checked:after:bg-white" />
+              </label>
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <GlassButton variant="ghost" size="sm" :disabled="wslStarting" @click="startEnabledWslProfiles()">
+                <Loader2 v-if="wslStarting" class="size-3.5 animate-spin" />
+                <Zap v-else class="size-3.5" />
+                Start enabled profiles
+              </GlassButton>
+              <GlassButton variant="ghost" size="sm" :disabled="wslPreparingPentest" @click="preparePentestWslAccount">
+                <Loader2 v-if="wslPreparingPentest" class="size-3.5 animate-spin" />
+                <Wrench v-else class="size-3.5" />
+                Prepare pentest account
+              </GlassButton>
+            </div>
+          </div>
+
+          <div class="grid gap-2">
+            <div
+              v-for="distro in wslInfo.distributions"
+              :key="distro.name"
+              class="flex items-center gap-3 rounded-lg border border-[var(--border)] bg-black/10 px-3 py-2"
+            >
+              <span class="size-1.5 rounded-full" :class="distro.state === 'Running' ? 'bg-emerald-400' : 'bg-white/25'" />
+              <div class="min-w-0 flex-1">
+                <p class="truncate text-xs font-medium text-[var(--text)]">{{ distro.name }}</p>
+                <p class="text-[10px] text-[var(--text-faint)]">{{ distro.state || 'Installed' }} · WSL {{ distro.version || '?' }}</p>
+              </div>
+              <span v-if="distro.default" class="rounded-full border border-indigo-500/20 bg-indigo-500/10 px-2 py-0.5 text-[10px] text-indigo-300">Default</span>
+            </div>
+          </div>
+
+          <div class="space-y-2 rounded-lg border border-[var(--border)] bg-black/10 p-3">
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <p class="text-xs font-semibold text-[var(--text)]">Profiles</p>
+                <p class="mt-0.5 text-[11px] text-[var(--text-faint)]">Assign WSL distributions for Academy and Pentest workflows.</p>
+              </div>
+              <GlassButton variant="ghost" size="sm" @click="app.ensureDefaultWslProfiles(wslInfo.defaultDistro || wslInfo.distributions[0]?.name || '')">
+                Reset profiles
+              </GlassButton>
+            </div>
+
+            <div v-for="(profile, index) in app.wslProfiles" :key="profile.id" class="grid gap-2 rounded-lg border border-white/[0.06] bg-white/[0.025] p-3">
+              <div class="flex items-start justify-between gap-3">
+                <div>
+                  <p class="text-xs font-medium text-[var(--text)]">{{ profile.name }}</p>
+                  <p class="mt-0.5 text-[11px] text-[var(--text-faint)]">{{ profile.purpose }}</p>
+                  <p class="mt-1 font-mono text-[10px] text-[var(--text-faint)]">{{ profile.homePath }}</p>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer shrink-0">
+                  <input
+                    :checked="profile.enabled"
+                    type="checkbox"
+                    class="sr-only peer"
+                    @change="saveWslProfileEnabled(index, ($event.target as HTMLInputElement).checked)"
+                  >
+                  <div class="w-9 h-5 bg-white/10 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white/40 after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600 peer-checked:after:bg-white" />
+                </label>
+              </div>
+              <select
+                class="h-9 rounded-lg border border-[var(--border)] bg-black/20 px-2 text-xs text-[var(--text)] outline-none"
+                :value="profile.distro"
+                @change="saveWslProfileDistro(index, ($event.target as HTMLSelectElement).value)"
+              >
+                <option value="">Default distribution</option>
+                <option v-for="distro in wslInfo.distributions" :key="distro.name" :value="distro.name">{{ distro.name }}</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Clean Vindicta profiles only -->
+          <div class="space-y-3 rounded-lg border border-amber-500/20 bg-amber-500/[0.04] p-3">
+            <div>
+              <p class="text-xs font-semibold text-amber-200">Clean Vindicta Profiles</p>
+              <p class="mt-0.5 text-[11px] leading-relaxed text-[var(--text-muted)]">Removes only the <span class="font-mono">pentest</span> and <span class="font-mono">academy</span> user accounts and their home directories from the selected distribution. The distribution itself is kept.</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+              <select v-model="cleanProfilesDistro" class="h-9 min-w-40 flex-1 rounded-lg border border-amber-500/20 bg-black/20 px-2 text-xs text-[var(--text)] outline-none">
+                <option value="">Choose distribution</option>
+                <option v-for="distro in wslInfo.distributions" :key="distro.name" :value="distro.name">{{ distro.name }}</option>
+              </select>
+              <GlassCheckbox v-model="confirmCleanProfiles" size="sm" class="text-[11px] text-[var(--text-muted)]">
+                Confirm
+              </GlassCheckbox>
+              <GlassButton
+                size="sm"
+                class="bg-amber-600/20 text-amber-300 border-amber-500/30 hover:bg-amber-600/30"
+                :disabled="!cleanProfilesDistro || !confirmCleanProfiles || wslCleaningProfiles"
+                @click="cleanVindictaProfiles"
+              >
+                <Loader2 v-if="wslCleaningProfiles" class="size-3.5 animate-spin" />
+                <XCircle v-else class="size-3.5" />
+                Clean Profiles
+              </GlassButton>
+            </div>
+          </div>
+
+          <!-- Unregister entire distribution (destructive) -->
+          <div class="space-y-3 rounded-lg border border-red-500/20 bg-red-500/[0.04] p-3">
+            <div>
+              <p class="text-xs font-semibold text-red-200">Unregister Entire Distribution</p>
+              <p class="mt-0.5 text-[11px] leading-relaxed text-[var(--text-muted)]">Permanently deletes the full Linux filesystem of the selected distribution. This cannot be undone.</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+              <select v-model="purgeDistro" class="h-9 min-w-40 flex-1 rounded-lg border border-red-500/20 bg-black/20 px-2 text-xs text-[var(--text)] outline-none">
+                <option value="">Choose distribution</option>
+                <option v-for="distro in wslInfo.distributions" :key="distro.name" :value="distro.name">{{ distro.name }}</option>
+              </select>
+              <GlassCheckbox v-model="confirmWslPurge" size="sm" class="text-[11px] text-[var(--text-muted)]">
+                Yes, delete everything
+              </GlassCheckbox>
+              <GlassButton
+                size="sm"
+                class="bg-red-600/20 text-red-300 border-red-500/30 hover:bg-red-600/30"
+                :disabled="!purgeDistro || !confirmWslPurge || wslPurging"
+                @click="purgeSelectedWsl"
+              >
+                <Loader2 v-if="wslPurging" class="size-3.5 animate-spin" />
+                <XCircle v-else class="size-3.5" />
+                Unregister
+              </GlassButton>
+            </div>
+          </div>
+        </div>
+
+        <div v-else class="rounded-lg border border-amber-500/20 bg-amber-500/[0.06] p-3">
+          <p class="text-xs text-[var(--text-muted)]">
+            Install WSL with <code class="rounded bg-white/[0.07] px-1 py-0.5 font-mono text-[11px]">wsl --install</code>, then come back here to assign Academy and Pentest profiles.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Updates -->
+    <div v-show="activeSettingsTab === 'updates'" class="space-y-3">
+      <h3 class="text-[10px] font-semibold text-[var(--text-faint)] uppercase tracking-[0.12em]">Updates</h3>
+      <div class="p-4 rounded-xl bg-[var(--bg-card)] border border-[var(--border)] space-y-4">
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <p class="text-sm font-semibold text-[var(--text)]">Vindicta Desktop</p>
+            <p class="mt-1 text-xs text-[var(--text-muted)]">
+              Current {{ appVersion ? `v${appVersion}` : 'version unknown' }}
+              <span v-if="latestRelease"> · Latest {{ latestRelease.tagName }}</span>
+            </p>
+            <p v-if="updateError" class="mt-1 text-xs text-amber-300">{{ updateError }}</p>
+          </div>
+          <GlassButton variant="ghost" size="sm" :disabled="updateChecking" @click="checkForUpdates">
+            <Loader2 v-if="updateChecking" class="size-3.5 animate-spin" />
+            <Github v-else class="size-3.5" />
+            Check
+          </GlassButton>
+        </div>
+
+        <button
+          v-if="hasUpdate"
+          class="flex w-full items-center justify-between gap-3 rounded-lg border border-emerald-500/25 bg-emerald-500/[0.08] px-3 py-2.5 text-left transition-colors hover:bg-emerald-500/12"
+          @click="openLatestRelease"
+        >
+          <span>
+            <span class="block text-xs font-semibold text-emerald-200">Update available: {{ latestRelease?.name }}</span>
+            <span class="mt-0.5 block text-[11px] text-[var(--text-muted)]">Open surelle-ha/vindicta releases to download it.</span>
+          </span>
+          <Download class="size-4 shrink-0 text-emerald-300" />
+        </button>
+        <p v-else-if="latestRelease && !updateChecking" class="text-xs text-[var(--text-muted)]">You are on the latest GitHub release.</p>
+      </div>
+    </div>
+
     <!-- About -->
-    <div class="space-y-3">
+    <div v-show="activeSettingsTab === 'updates'" class="space-y-3">
       <h3 class="text-[10px] font-semibold text-[var(--text-faint)] uppercase tracking-[0.12em]">About</h3>
       <div class="p-4 rounded-xl bg-[var(--bg-card)] border border-[var(--border)] space-y-4">
         <div class="flex items-start gap-3">
@@ -572,79 +1071,8 @@ async function resetAll() {
       </div>
     </div>
 
-    <!-- Contact -->
-    <div class="space-y-3">
-      <h3 class="text-[10px] font-semibold text-[var(--text-faint)] uppercase tracking-[0.12em]">Contact</h3>
-      <div class="p-4 rounded-xl bg-[var(--bg-card)] border border-[var(--border)] space-y-4">
-        <div>
-          <p class="text-sm font-semibold text-[var(--text)]">Submit feedback</p>
-          <p class="mt-1 text-xs leading-relaxed text-[var(--text-muted)]">
-            Send bugs, suggestions, and feature requests to GitHub Issues. Tokens stored in a desktop app are local convenience secrets, not backend-protected secrets.
-          </p>
-        </div>
-
-        <div class="grid grid-cols-3 gap-2">
-          <button
-            v-for="type in contactTypes"
-            :key="type.id"
-            class="inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-colors"
-            :class="contactType === type.id
-              ? 'border-indigo-500/40 bg-indigo-500/15 text-indigo-100'
-              : 'border-[var(--border)] bg-black/10 text-[var(--text-muted)] hover:bg-white/[0.05] hover:text-[var(--text)]'"
-            @click="contactType = type.id"
-          >
-            <component :is="type.icon" class="size-3.5" />
-            {{ type.label }}
-          </button>
-        </div>
-
-        <GlassInput v-model="contactTitle" label="Title" placeholder="Short issue title" />
-        <div class="flex flex-col gap-1.5">
-          <label class="text-xs font-medium text-white/60 uppercase tracking-wider">Details</label>
-          <textarea
-            v-model="contactBody"
-            rows="5"
-            placeholder="What happened, what did you expect, or what should Vindicta support?"
-            class="w-full resize-none rounded-lg border border-white/[0.08] bg-white/[0.04] px-4 py-2.5 text-sm text-white outline-none transition-colors placeholder:text-white/30 focus:border-indigo-500/60 focus:bg-white/10"
-          />
-        </div>
-        <GlassInput v-model="contactEmail" label="Contact email optional" placeholder="you@example.com" />
-
-        <button
-          class="flex w-full cursor-pointer items-center gap-2 rounded-lg border border-[var(--border)] bg-black/10 px-3 py-2 text-left text-xs text-[var(--text-muted)] transition-colors hover:bg-white/[0.05] hover:text-[var(--text)]"
-          @click="showContactConfig = !showContactConfig"
-        >
-          <Github class="size-3.5" />
-          GitHub issue settings
-          <ChevronDown v-if="!showContactConfig" class="ml-auto size-3.5" />
-          <ChevronUp v-else class="ml-auto size-3.5" />
-        </button>
-
-        <div v-if="showContactConfig" class="space-y-3 rounded-lg border border-[var(--border)] bg-black/10 p-3">
-          <GlassInput v-model="contactRepo" label="Repository" placeholder="owner/repo" />
-          <GlassInput v-model="contactToken" label="Fine-grained token" type="password" placeholder="GitHub token with Issues: Read and write" />
-          <p class="text-[11px] leading-relaxed text-[var(--text-faint)]">
-            Use a fine-grained GitHub token scoped to one repository with Issues read/write only. Do not use a broad personal token.
-          </p>
-          <GlassButton variant="ghost" size="sm" @click="saveContactSettings">Save issue settings</GlassButton>
-        </div>
-
-        <div class="flex flex-wrap gap-2">
-          <GlassButton :disabled="!canSubmitContact || contactSubmitting" @click="submitGitHubIssue">
-            <Loader2 v-if="contactSubmitting" class="size-3.5 animate-spin" />
-            <Send v-else class="size-3.5" />
-            Submit to GitHub
-          </GlassButton>
-          <GlassButton variant="ghost" :disabled="!canSubmitContact" @click="openIssueInBrowser">
-            <Github class="size-3.5" />
-            Open prefilled issue
-          </GlassButton>
-        </div>
-      </div>
-    </div>
-
     <!-- Doctor -->
-    <div class="space-y-3">
+    <div v-show="activeSettingsTab === 'diagnostics'" class="space-y-3">
       <h3 class="text-[10px] font-semibold text-[var(--text-faint)] uppercase tracking-[0.12em]">Doctor</h3>
       <div class="p-4 rounded-xl bg-[var(--bg-card)] border border-[var(--border)] space-y-4">
         <div class="flex items-center justify-between">
@@ -713,7 +1141,7 @@ async function resetAll() {
     </div>
 
     <!-- Advanced -->
-    <div class="space-y-3">
+    <div v-show="activeSettingsTab === 'data'" class="space-y-3">
       <h3 class="text-[10px] font-semibold text-[var(--text-faint)] uppercase tracking-[0.12em]">Advanced</h3>
       <div class="p-4 rounded-xl bg-[var(--bg-card)] border border-[var(--border)] space-y-3">
         <button
@@ -730,7 +1158,7 @@ async function resetAll() {
     </div>
 
     <!-- Danger Zone -->
-    <div class="space-y-3">
+    <div v-show="activeSettingsTab === 'data'" class="space-y-3">
       <h3 class="text-[10px] font-semibold text-red-400/70 uppercase tracking-[0.12em]">Danger Zone</h3>
       <div class="danger-zone space-y-3">
         <p class="text-xs text-[var(--text-muted)]">
@@ -763,6 +1191,21 @@ async function resetAll() {
           </GlassButton>
           <div v-else class="flex gap-2">
             <GlassButton size="sm" class="bg-red-600/20 text-red-400 border-red-500/30 hover:bg-red-600/30" @click="clearProjects">Confirm</GlassButton>
+            <GlassButton variant="ghost" size="sm" @click="confirmReset = null">Cancel</GlassButton>
+          </div>
+        </div>
+
+        <!-- Reset academy -->
+        <div class="flex items-center justify-between py-2 border-t border-white/[0.05]">
+          <div>
+            <p class="text-sm text-[var(--text)]">Reset Academy progress</p>
+            <p class="text-xs text-[var(--text-muted)]">Clears enrollment, completed lessons, professor chats, and certificate</p>
+          </div>
+          <GlassButton v-if="confirmReset !== 'academy'" variant="ghost" size="sm" class="text-red-400 hover:text-red-300" @click="confirmReset = 'academy'">
+            Reset
+          </GlassButton>
+          <div v-else class="flex gap-2">
+            <GlassButton size="sm" class="bg-red-600/20 text-red-400 border-red-500/30 hover:bg-red-600/30" @click="resetAcademyProgress">Confirm</GlassButton>
             <GlassButton variant="ghost" size="sm" @click="confirmReset = null">Cancel</GlassButton>
           </div>
         </div>

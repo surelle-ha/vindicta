@@ -230,7 +230,7 @@ process.on('SIGTERM', () => { server.close(); process.exit(0); });
         <Plug class="size-5 text-violet-300" />
       </div>
       <div>
-        <h1 class="text-lg font-bold text-[var(--text)]">MCP Server</h1>
+        <h1 class="font-display text-lg font-bold text-[var(--text)]">MCP Server</h1>
         <p class="text-xs text-[var(--text-muted)]">Expose Vindicta to AI agents via the Model Context Protocol.</p>
       </div>
     </div>

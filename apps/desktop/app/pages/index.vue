@@ -1,21 +1,20 @@
 <script setup lang="ts">
 import {
   ArrowRight,
-  AlertTriangle,
-  BookOpen,
   CalendarDays,
   CheckCircle2,
+  ExternalLink,
   FolderOpen,
   Plus,
+  RefreshCw,
   Rocket,
+  Rss,
   ShieldCheck,
-  Sparkles,
-  Wrench,
-  Zap,
 } from 'lucide-vue-next'
 import { deriveProjectCode } from '~/utils/ticket'
 
 const projects = useProjectsStore()
+const app = useAppStore()
 const security = useSecurityStore()
 const wizard = useWizardStore()
 const { createProject } = useVindictaJson()
@@ -24,24 +23,26 @@ const { notify } = useNotifications()
 onMounted(async () => {
   await projects.loadProjects()
   await loadActiveSecurity()
+  await loadSecurityNews()
 })
 
 const activeProject = computed(() => projects.activeProject)
 const latestScanLabel = computed(() => security.latestScan ? new Date(security.latestScan.scannedAt).toLocaleDateString() : 'No scan')
 
-const stats = computed(() => [
-  { label: 'Projects', value: projects.projects.length, icon: FolderOpen, tone: 'text-indigo-300' },
-  { label: 'Open Findings', value: security.openFindings, icon: AlertTriangle, tone: 'text-red-300' },
-  { label: 'Saved Scans', value: security.scans.length, icon: Zap, tone: 'text-emerald-300' },
-])
+interface NewsItem {
+  id: string
+  title: string
+  link: string
+  sourceLabel: string
+  publishedLabel: string
+  summary: string
+  timestamp: number
+}
 
-const guides = [
-  { title: 'Run a security scan', detail: 'Select a project, choose effort, and let Codex inspect concrete risks.', icon: ShieldCheck },
-  { title: 'Keep one active project', detail: 'Use the sidebar selector to scope scans, reports, and findings.', icon: FolderOpen },
-  { title: 'Run Doctor first', detail: 'Check npm, Codex, and local app health before automation.', icon: Wrench },
-  { title: 'Track remediation', detail: 'Convert scan results into security findings and move them to closure.', icon: Sparkles },
-]
-
+const newsItems = ref<NewsItem[]>([])
+const newsLoading = ref(false)
+const newsError = ref('')
+const enabledRssSources = computed(() => app.rssSources.filter(source => source.enabled && source.url.trim()))
 
 async function loadActiveSecurity() {
   if (!activeProject.value?.absolutePath) return
@@ -52,6 +53,99 @@ watch(() => activeProject.value?.id, () => {
   void loadActiveSecurity()
 })
 
+function cleanSummary(value: string) {
+  return value.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+}
+
+function formatNewsDate(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 'Recent'
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+}
+
+function childText(parent: Element, names: string[]) {
+  for (const name of names) {
+    const direct = Array.from(parent.children).find(child => child.tagName.toLowerCase() === name.toLowerCase())
+    const value = direct?.textContent?.trim()
+    if (value) return value
+  }
+  return ''
+}
+
+function itemLink(item: Element, sourceUrl: string) {
+  const rssLink = childText(item, ['link'])
+  if (rssLink) return rssLink
+  const atomLink = Array.from(item.querySelectorAll('link')).find(link => !link.getAttribute('rel') || link.getAttribute('rel') === 'alternate')
+  return atomLink?.getAttribute('href') || sourceUrl
+}
+
+async function fetchRssXml(url: string) {
+  try {
+    const { invoke } = await import('@tauri-apps/api/core')
+    return await invoke<string>('fetch_rss_source', { url })
+  }
+  catch {
+    const response = await fetch(url)
+    if (!response.ok) throw new Error(`RSS source returned ${response.status}`)
+    return response.text()
+  }
+}
+
+async function loadSecurityNews() {
+  if (!enabledRssSources.value.length) {
+    newsItems.value = []
+    return
+  }
+
+  newsLoading.value = true
+  newsError.value = ''
+  try {
+    const batches = await Promise.allSettled(enabledRssSources.value.map(async (source) => {
+      const xml = await fetchRssXml(source.url)
+      const document = new DOMParser().parseFromString(xml, 'application/xml')
+      const parserError = document.querySelector('parsererror')
+      if (parserError) throw new Error(`${source.label} returned invalid RSS XML`)
+      const nodes = [
+        ...Array.from(document.querySelectorAll('item')),
+        ...Array.from(document.querySelectorAll('entry')),
+      ]
+
+      return nodes.slice(0, 6).map((item, index) => {
+        const title = childText(item, ['title']) || 'Untitled security story'
+        const link = itemLink(item, source.url)
+        const pubDate = childText(item, ['pubDate', 'published', 'updated', 'dc:date'])
+        const summary = childText(item, ['description', 'summary', 'content:encoded', 'content'])
+        const timestamp = pubDate ? new Date(pubDate).getTime() : Date.now() - index
+        return {
+          id: `${source.id}-${index}-${title}`,
+          title,
+          link,
+          sourceLabel: source.label,
+          publishedLabel: formatNewsDate(pubDate),
+          summary: cleanSummary(summary),
+          timestamp: Number.isNaN(timestamp) ? Date.now() - index : timestamp,
+        } satisfies NewsItem
+      })
+    }))
+
+    const rejected = batches.filter(result => result.status === 'rejected') as PromiseRejectedResult[]
+    newsItems.value = batches
+      .flatMap(result => result.status === 'fulfilled' ? result.value : [])
+      .sort((a, b) => b.timestamp - a.timestamp)
+      .slice(0, 8)
+
+    if (!newsItems.value.length) {
+      newsError.value = rejected[0]?.reason?.message ?? 'No stories were returned from the enabled feeds.'
+    }
+  }
+  catch (e: any) {
+    newsError.value = e?.message ?? 'Could not load security news.'
+  }
+  finally {
+    newsLoading.value = false
+  }
+}
+
 async function handleFinish() {
   if (!wizard.selectedPath || !wizard.projectName) return
 
@@ -61,8 +155,8 @@ async function handleFinish() {
     absolutePath: wizard.selectedPath,
     githubRepo: null,
     editor: 'other',
-    aiTool: wizard.selectedAITools[0] ?? 'codex',
-    aiTools: wizard.selectedAITools,
+    aiTool: 'codex',
+    aiTools: ['codex', 'claude_code'],
     activeAITool: null,
     ownedBy: 'local',
     code: wizard.projectCode || deriveProjectCode(wizard.projectName),
@@ -86,7 +180,7 @@ async function handleFinish() {
             <p class="text-[10px] font-semibold uppercase tracking-[0.18em] text-indigo-300/70">Home</p>
             <div class="mt-2 flex items-center gap-3">
               <ProjectGuideOrb accent="#67e8f9" />
-              <h1 class="text-3xl font-bold tracking-tight text-[var(--text)]">Welcome back to Vindicta</h1>
+              <h1 class="font-display text-3xl font-bold text-[var(--text)]">Welcome back to Vindicta</h1>
             </div>
             <p class="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--text-muted)]">
               Scan local projects for vulnerabilities, keep findings scoped to the selected codebase, and turn security review into a calmer command center.
@@ -133,40 +227,60 @@ async function handleFinish() {
       </div>
     </section>
 
-    <section class="grid gap-3 sm:grid-cols-3">
-      <div
-        v-for="stat in stats"
-        :key="stat.label"
-        class="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-4"
-      >
-        <div class="flex items-center justify-between">
-          <p class="text-xs text-[var(--text-muted)]">{{ stat.label }}</p>
-          <component :is="stat.icon" class="size-3.5" :class="stat.tone" />
-        </div>
-        <p class="mt-2 text-2xl font-semibold text-[var(--text)]">{{ stat.value }}</p>
-      </div>
-    </section>
-
     <div class="grid gap-6 xl:grid-cols-[1fr_22rem]">
       <main class="space-y-6">
         <section class="rounded-xl border border-[var(--border)] bg-[var(--bg-card)]">
-          <div class="flex items-center justify-between border-b border-[var(--border)] p-4">
-            <div>
-              <h2 class="text-sm font-semibold text-[var(--text)]">Start Guide</h2>
-              <p class="mt-0.5 text-xs text-[var(--text-muted)]">A short path through the current Vindicta workflow.</p>
+          <div class="flex items-center justify-between gap-3 border-b border-[var(--border)] p-4">
+            <div class="flex items-center gap-2">
+              <Rss class="size-4 text-cyan-300" />
+              <div>
+                <h2 class="text-sm font-semibold text-[var(--text)]">Security News</h2>
+                <p class="mt-0.5 text-xs text-[var(--text-muted)]">Fresh stories from your configured RSS sources.</p>
+              </div>
             </div>
-            <BookOpen class="size-4 text-sky-300" />
-          </div>
-          <div class="grid gap-3 p-4 md:grid-cols-2">
-            <article
-              v-for="guide in guides"
-              :key="guide.title"
-              class="rounded-lg border border-[var(--border)] bg-black/10 p-4"
+            <button
+              class="grid size-8 place-items-center rounded-lg border border-[var(--border)] text-[var(--text-faint)] transition-colors hover:bg-white/[0.05] hover:text-[var(--text)] disabled:opacity-50"
+              :disabled="newsLoading"
+              title="Refresh news"
+              @click="loadSecurityNews"
             >
-              <component :is="guide.icon" class="size-4 text-indigo-300" />
-              <h3 class="mt-3 text-sm font-semibold text-[var(--text)]">{{ guide.title }}</h3>
-              <p class="mt-1 text-xs leading-relaxed text-[var(--text-muted)]">{{ guide.detail }}</p>
-            </article>
+              <RefreshCw class="size-3.5" :class="newsLoading ? 'animate-spin' : ''" />
+            </button>
+          </div>
+
+          <div class="p-4">
+            <div v-if="newsLoading && !newsItems.length" class="grid min-h-32 place-items-center text-xs text-[var(--text-muted)]">
+              Loading security news...
+            </div>
+            <div v-else-if="newsError" class="rounded-lg border border-amber-500/20 bg-amber-500/[0.06] p-3 text-xs text-amber-200">
+              {{ newsError }}
+            </div>
+            <div v-else-if="!newsItems.length" class="rounded-lg border border-[var(--border)] bg-black/10 p-3 text-xs text-[var(--text-muted)]">
+              No enabled RSS sources yet. Add sources in Settings.
+            </div>
+            <div v-else class="grid gap-3 md:grid-cols-2">
+              <a
+                v-for="item in newsItems"
+                :key="item.id"
+                :href="item.link"
+                target="_blank"
+                rel="noreferrer"
+                class="group rounded-lg border border-[var(--border)] bg-black/10 p-4 transition-all hover:-translate-y-0.5 hover:border-cyan-500/25 hover:bg-white/[0.04]"
+              >
+                <div class="flex items-center justify-between gap-3">
+                  <span class="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-medium text-cyan-200">{{ item.sourceLabel }}</span>
+                  <span class="shrink-0 text-[10px] text-[var(--text-faint)]">{{ item.publishedLabel }}</span>
+                </div>
+                <h3 class="mt-3 line-clamp-2 text-sm font-semibold leading-snug text-[var(--text)] group-hover:text-cyan-100">
+                  {{ item.title }}
+                </h3>
+                <p class="mt-2 line-clamp-2 text-xs leading-relaxed text-[var(--text-muted)]">{{ item.summary || 'Open the story for details.' }}</p>
+                <span class="mt-3 inline-flex items-center gap-1 text-[11px] text-cyan-300/80">
+                  Read story
+                  <ExternalLink class="size-3" />
+                </span>
+              </a>
+            </div>
           </div>
         </section>
 

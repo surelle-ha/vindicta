@@ -418,5 +418,10 @@ export const useSecurityStore = defineStore('security', {
       this.data.scans = []
       await this.persist()
     },
+
+    async clearAllFindings() {
+      this.data.findings = []
+      await this.persist()
+    },
   },
 })

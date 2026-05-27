@@ -1,0 +1,1 @@
+import{a2 as o}from"./yjyGEl7p.js";const n=o("notifications",{state:()=>({items:[]}),actions:{push(t,i="info"){const s=`notif_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;this.items.push({id:s,message:t,type:i,at:Date.now()}),setTimeout(()=>this.dismiss(s),4e3)},dismiss(t){this.items=this.items.filter(i=>i.id!==t)}}});export{n as u};

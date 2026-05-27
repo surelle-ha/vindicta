@@ -1,18 +1,17 @@
 <script setup lang="ts">
-import { Activity, RotateCcw, LogIn, UserCircle2, Clock3 } from 'lucide-vue-next'
-import type { PromptRunHistory } from '~/stores/user'
+import { Activity, Award, BookOpenCheck, GraduationCap, LogIn, MapPin, RotateCcw, UserCircle2 } from 'lucide-vue-next'
+import { LESSONS, TOTAL_DAYS } from '~/data/curriculum'
 
 const user = useUserStore()
+const academy = useAcademyStore()
 const router = useRouter()
 
 const name = ref(user.name)
 const email = ref(user.email)
-const jobRole = ref(user.jobRole || 'Developer')
+const jobRole = ref(user.jobRole || 'Security Practitioner')
 
-const roles = ['Developer', 'Designer', 'Product Manager', 'QA Engineer', 'Tech Lead', 'DevOps', 'Other']
+const roles = ['Security Practitioner', 'Developer', 'DevSecOps', 'Pentester', 'Blue Team Analyst', 'Security Engineer', 'Tech Lead', 'Other']
 const saved = ref(false)
-const showPromptModal = ref(false)
-const selectedPrompt = ref<PromptRunHistory | null>(null)
 
 async function saveProfile() {
   await user.save({ name: name.value.trim(), email: email.value.trim(), jobRole: jobRole.value })
@@ -31,36 +30,35 @@ const lastTokenUse = computed(() => {
   if (!tokenUsage.value.lastUsedAt) return 'No AI usage recorded yet'
   return new Date(tokenUsage.value.lastUsedAt).toLocaleString()
 })
-const promptPageSize = 6
-const promptPage = ref(1)
-const promptPageCount = computed(() => Math.max(1, Math.ceil(tokenUsage.value.history.length / promptPageSize)))
-const promptHistory = computed(() => {
-  const start = (promptPage.value - 1) * promptPageSize
-  return tokenUsage.value.history.slice(start, start + promptPageSize)
+
+const academyProgress = computed(() => academy.progressPercent)
+const totalLessons = TOTAL_DAYS
+const lastLesson = computed(() => {
+  if (academy.lastVisitedLessonId) {
+    return LESSONS.find(lesson => lesson.id === academy.lastVisitedLessonId) ?? null
+  }
+  return LESSONS.find(lesson => !academy.isCompleted(lesson.id)) ?? LESSONS[0] ?? null
+})
+const completedLessons = computed(() => academy.completedCount)
+const academyStatus = computed(() => {
+  if (academy.allCompleted) return 'Completed'
+  if (completedLessons.value > 0) return 'In progress'
+  return 'Ready to begin'
+})
+const badgeTitle = computed(() => {
+  if (academy.allCompleted) return 'Security Engineering Graduate'
+  if (completedLessons.value >= 15) return 'Pentest Practitioner'
+  if (completedLessons.value >= 5) return 'Security Foundations'
+  return 'Security Initiate'
+})
+const badgeSubtitle = computed(() => {
+  if (academy.allCompleted) return 'Badge composition ready for export.'
+  return 'Badge will evolve as Academy milestones are completed.'
 })
 
-watch(() => tokenUsage.value.history.length, () => {
-  if (promptPage.value > promptPageCount.value) promptPage.value = promptPageCount.value
+onMounted(() => {
+  void academy.loadFromDisk()
 })
-
-function previousPromptPage() {
-  promptPage.value = Math.max(1, promptPage.value - 1)
-}
-
-function nextPromptPage() {
-  promptPage.value = Math.min(promptPageCount.value, promptPage.value + 1)
-}
-
-function promptTitle(prompt: string) {
-  const firstLine = prompt.split('\n').map(line => line.trim()).find(Boolean)
-  if (!firstLine) return 'Prompt content unavailable'
-  return firstLine.length > 90 ? `${firstLine.slice(0, 90)}...` : firstLine
-}
-
-function openPrompt(item: PromptRunHistory) {
-  selectedPrompt.value = item
-  showPromptModal.value = true
-}
 </script>
 
 <template>
@@ -174,93 +172,72 @@ function openPrompt(item: PromptRunHistory) {
       </aside>
 
       <main class="space-y-6">
-        <div v-if="tokenUsage.byModel.length" class="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-4 space-y-3">
-          <p class="text-sm font-semibold text-[var(--text)]">Models</p>
-          <div class="grid gap-2 sm:grid-cols-2">
-            <div
-              v-for="item in tokenUsage.byModel"
-              :key="`${item.tool}-${item.model}`"
-              class="rounded-lg border border-[var(--border)] bg-black/10 px-3 py-2"
-            >
-              <div class="flex items-center justify-between gap-2">
-                <p class="truncate text-xs font-medium text-[var(--text)]">{{ item.model }}</p>
-                <GlassBadge variant="info" size="sm">{{ item.tool }}</GlassBadge>
+        <div class="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-4 space-y-4">
+          <div class="flex items-start justify-between gap-3">
+            <div class="flex items-center gap-2">
+              <GraduationCap class="size-4 text-indigo-300" />
+              <div>
+                <p class="text-sm font-semibold text-[var(--text)]">Academy Progress</p>
+                <p class="text-xs text-[var(--text-muted)] mt-0.5">{{ academyStatus }}</p>
               </div>
-              <p class="mt-1 text-[11px] text-[var(--text-muted)]">
-                {{ item.runs }} run{{ item.runs !== 1 ? 's' : '' }} - {{ item.totalTokens.toLocaleString() }} estimated tokens
-              </p>
-              <div class="mt-2 grid grid-cols-2 gap-2 text-[10px]">
-                <span class="rounded border border-indigo-500/15 bg-indigo-500/10 px-2 py-1 text-indigo-200">In {{ item.inputTokens.toLocaleString() }}</span>
-                <span class="rounded border border-violet-500/15 bg-violet-500/10 px-2 py-1 text-violet-200">Out {{ item.outputTokens.toLocaleString() }}</span>
+            </div>
+            <GlassBadge variant="info">{{ completedLessons }}/{{ totalLessons }}</GlassBadge>
+          </div>
+
+          <div>
+            <div class="flex items-center justify-between text-[10px] text-[var(--text-faint)]">
+              <span>Overall progress</span>
+              <span>{{ academyProgress }}%</span>
+            </div>
+            <div class="mt-2 h-2 overflow-hidden rounded-full bg-white/[0.06]">
+              <div class="h-full rounded-full bg-gradient-to-r from-indigo-400 via-violet-400 to-emerald-400" :style="{ width: `${academyProgress}%` }" />
+            </div>
+          </div>
+
+          <div class="rounded-lg border border-[var(--border)] bg-black/10 p-3">
+            <div class="flex items-start gap-2">
+              <MapPin class="mt-0.5 size-3.5 shrink-0 text-emerald-300" />
+              <div class="min-w-0">
+                <p class="text-xs font-semibold text-[var(--text)]">Where you left off</p>
+                <p class="mt-1 truncate text-sm text-[var(--text)]">{{ lastLesson ? `Lesson ${lastLesson.day}: ${lastLesson.title}` : 'Academy not started yet' }}</p>
+                <p class="mt-1 text-[11px] text-[var(--text-muted)]">{{ lastLesson?.duration ?? 'Start the first lesson whenever you are ready.' }}</p>
               </div>
             </div>
           </div>
+
+          <GlassButton size="sm" @click="router.push('/academy')">
+            <BookOpenCheck class="size-3.5" />
+            Continue Academy
+          </GlassButton>
         </div>
 
-        <div class="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-4 space-y-3">
-          <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div class="flex items-center gap-2">
-              <Clock3 class="size-3.5 text-violet-300" />
-              <div>
-                <p class="text-sm font-semibold text-[var(--text)]">Prompt History</p>
-                <p class="text-xs text-[var(--text-muted)] mt-0.5">Recent prompts run through configured AI tools.</p>
+        <div class="rounded-xl border border-amber-500/20 bg-amber-500/[0.04] p-4">
+          <div class="flex items-start gap-4">
+            <div class="grid size-16 shrink-0 place-items-center rounded-xl border border-amber-400/25 bg-gradient-to-br from-amber-500/25 via-violet-500/15 to-emerald-500/20">
+              <Award class="size-8 text-amber-200" />
+            </div>
+            <div class="min-w-0 flex-1">
+              <p class="text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-300">Badge Composer</p>
+              <h2 class="mt-1 text-lg font-bold text-[var(--text)]">{{ badgeTitle }}</h2>
+              <p class="mt-1 text-xs leading-relaxed text-[var(--text-muted)]">{{ badgeSubtitle }}</p>
+              <div class="mt-3 grid gap-2 sm:grid-cols-3">
+                <div class="rounded-lg border border-white/10 bg-black/10 px-3 py-2">
+                  <p class="text-[10px] text-[var(--text-faint)]">Academy</p>
+                  <p class="text-sm font-semibold text-[var(--text)]">{{ academyProgress }}%</p>
+                </div>
+                <div class="rounded-lg border border-white/10 bg-black/10 px-3 py-2">
+                  <p class="text-[10px] text-[var(--text-faint)]">Milestone</p>
+                  <p class="truncate text-sm font-semibold text-[var(--text)]">{{ badgeTitle }}</p>
+                </div>
+                <div class="rounded-lg border border-white/10 bg-black/10 px-3 py-2">
+                  <p class="text-[10px] text-[var(--text-faint)]">Status</p>
+                  <p class="text-sm font-semibold text-amber-200">Prepared</p>
+                </div>
               </div>
             </div>
-            <div v-if="tokenUsage.history.length > promptPageSize" class="flex items-center gap-2">
-              <span class="text-[10px] text-[var(--text-faint)]">
-                Page {{ promptPage }} of {{ promptPageCount }}
-              </span>
-              <GlassButton variant="ghost" size="sm" :disabled="promptPage === 1" @click="previousPromptPage">
-                Previous
-              </GlassButton>
-              <GlassButton variant="ghost" size="sm" :disabled="promptPage === promptPageCount" @click="nextPromptPage">
-                Next
-              </GlassButton>
-            </div>
-          </div>
-
-          <div v-if="promptHistory.length" class="space-y-2">
-            <button
-              v-for="item in promptHistory"
-              :key="item.id"
-              class="w-full rounded-lg border border-[var(--border)] bg-white/[0.03] px-3 py-2 text-left transition-colors hover:border-indigo-500/30 hover:bg-indigo-500/[0.06]"
-              @click="openPrompt(item)"
-            >
-              <div class="flex flex-wrap items-center gap-2">
-                <GlassBadge variant="info" size="sm">{{ item.tool }}</GlassBadge>
-                <span class="text-[10px] text-[var(--text-muted)]">{{ item.model }}</span>
-                <span class="text-[10px] text-[var(--text-faint)]">{{ new Date(item.createdAt).toLocaleString() }}</span>
-              </div>
-              <p class="text-xs text-[var(--text)] mt-1.5 break-words">{{ promptTitle(item.prompt) }}</p>
-              <div class="mt-2 flex flex-wrap gap-1.5 text-[10px]">
-                <span class="rounded border border-indigo-500/15 bg-indigo-500/10 px-2 py-0.5 text-indigo-200">Input {{ item.inputTokens.toLocaleString() }}</span>
-                <span class="rounded border border-violet-500/15 bg-violet-500/10 px-2 py-0.5 text-violet-200">Output {{ item.outputTokens.toLocaleString() }}</span>
-                <span class="rounded border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[var(--text-muted)]">Total {{ item.totalTokens.toLocaleString() }}</span>
-              </div>
-              <p class="text-[10px] text-[var(--text-faint)] mt-1">Click to view full prompt</p>
-            </button>
-          </div>
-
-          <div v-else class="rounded-lg border border-dashed border-[var(--border)] py-10 text-center">
-            <p class="text-sm text-[var(--text-muted)]">No prompt history yet.</p>
           </div>
         </div>
       </main>
     </div>
-
-    <GlassModal v-model="showPromptModal" title="Prompt Details" max-width="xl" @close="selectedPrompt = null">
-      <div v-if="selectedPrompt" class="space-y-4">
-        <div class="flex flex-wrap items-center gap-2">
-          <GlassBadge variant="info" size="sm">{{ selectedPrompt.tool }}</GlassBadge>
-          <span class="text-xs text-[var(--text-muted)]">{{ selectedPrompt.model }}</span>
-          <span class="text-xs text-[var(--text-faint)]">{{ new Date(selectedPrompt.createdAt).toLocaleString() }}</span>
-          <span class="text-xs text-indigo-300">Input {{ selectedPrompt.inputTokens.toLocaleString() }}</span>
-          <span class="text-xs text-violet-300">Output {{ selectedPrompt.outputTokens.toLocaleString() }}</span>
-          <span class="text-xs text-[var(--text-faint)]">Total {{ selectedPrompt.totalTokens.toLocaleString() }}</span>
-        </div>
-
-        <pre class="max-h-[60vh] overflow-auto custom-scroll whitespace-pre-wrap break-words rounded-lg border border-[var(--border)] bg-black/25 p-4 text-xs leading-relaxed text-[var(--text-muted)]">{{ selectedPrompt.prompt || 'Prompt content unavailable.' }}</pre>
-      </div>
-    </GlassModal>
   </div>
 </template>

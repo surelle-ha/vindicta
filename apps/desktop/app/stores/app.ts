@@ -18,11 +18,37 @@ export interface ContactSettings {
   githubToken: string
 }
 
+export interface OpenRouterSettings {
+  enabled: boolean
+  apiKey: string
+  model: string
+}
+
+export interface WslProfile {
+  id: string
+  name: string
+  purpose: string
+  distro: string
+  homePath: string
+  enabled: boolean
+}
+
+export interface RssSource {
+  id: string
+  label: string
+  url: string
+  enabled: boolean
+}
+
 interface AppSettings {
   theme: AppTheme
   notificationsEnabled: boolean
+  wslAutoStart: boolean
   smtp: SmtpSettings
   contact: ContactSettings
+  openRouter: OpenRouterSettings
+  wslProfiles: WslProfile[]
+  rssSources: RssSource[]
   featuresModalDismissed: boolean
   vigilanteEnabled: boolean
   mcpInSidebar: boolean
@@ -44,13 +70,63 @@ const DEFAULT_CONTACT: ContactSettings = {
   githubToken: '',
 }
 
+const DEFAULT_OPENROUTER: OpenRouterSettings = {
+  enabled: false,
+  apiKey: '',
+  model: 'openai/gpt-4.1-mini',
+}
+
+export const DEFAULT_WSL_PROFILES: WslProfile[] = [
+  {
+    id: 'academy',
+    name: 'Academy',
+    purpose: 'Isolated learning labs and course exercises',
+    distro: '',
+    homePath: '~/vindicta/academy',
+    enabled: true,
+  },
+  {
+    id: 'pentest',
+    name: 'Pentesting',
+    purpose: 'Recon, scanning, and exploit tooling workspace',
+    distro: '',
+    homePath: '~/vindicta/pentest',
+    enabled: true,
+  },
+]
+
+export const DEFAULT_RSS_SOURCES: RssSource[] = [
+  {
+    id: 'cshub-attacks',
+    label: 'CSHub Attacks',
+    url: 'https://www.cshub.com/rss/categories/attacks',
+    enabled: true,
+  },
+  {
+    id: 'cshub-articles',
+    label: 'CSHub Articles',
+    url: 'https://www.cshub.com/rss/articles',
+    enabled: true,
+  },
+  {
+    id: 'cshub-reports',
+    label: 'CSHub Reports',
+    url: 'https://www.cshub.com/rss/reports',
+    enabled: true,
+  },
+]
+
 export const useAppStore = defineStore('app', {
   state: (): AppSettings & { launched: boolean } => ({
     launched: false,
     theme: 'dark',
     notificationsEnabled: true,
+    wslAutoStart: true,
     smtp: { ...DEFAULT_SMTP },
     contact: { ...DEFAULT_CONTACT },
+    openRouter: { ...DEFAULT_OPENROUTER },
+    wslProfiles: DEFAULT_WSL_PROFILES.map(profile => ({ ...profile })),
+    rssSources: DEFAULT_RSS_SOURCES.map(source => ({ ...source })),
     featuresModalDismissed: false,
     vigilanteEnabled: false,
     mcpInSidebar: true,
@@ -65,8 +141,12 @@ export const useAppStore = defineStore('app', {
         if (saved) {
           this.theme = saved.theme ?? 'dark'
           this.notificationsEnabled = saved.notificationsEnabled ?? true
+          this.wslAutoStart = saved.wslAutoStart ?? true
           this.smtp = { ...DEFAULT_SMTP, ...(saved.smtp ?? {}) }
           this.contact = { ...DEFAULT_CONTACT, ...(saved.contact ?? {}) }
+          this.openRouter = { ...DEFAULT_OPENROUTER, ...(saved.openRouter ?? {}) }
+          this.wslProfiles = normalizeWslProfiles(saved.wslProfiles)
+          this.rssSources = normalizeRssSources(saved.rssSources)
           this.featuresModalDismissed = saved.featuresModalDismissed ?? false
           this.vigilanteEnabled = saved.vigilanteEnabled ?? false
           this.mcpInSidebar = saved.mcpInSidebar ?? true
@@ -79,8 +159,12 @@ export const useAppStore = defineStore('app', {
             const saved = JSON.parse(raw) as Partial<AppSettings>
             this.theme = saved.theme ?? 'dark'
             this.notificationsEnabled = saved.notificationsEnabled ?? true
+            this.wslAutoStart = saved.wslAutoStart ?? true
             this.smtp = { ...DEFAULT_SMTP, ...(saved.smtp ?? {}) }
             this.contact = { ...DEFAULT_CONTACT, ...(saved.contact ?? {}) }
+            this.openRouter = { ...DEFAULT_OPENROUTER, ...(saved.openRouter ?? {}) }
+            this.wslProfiles = normalizeWslProfiles(saved.wslProfiles)
+            this.rssSources = normalizeRssSources(saved.rssSources)
             this.featuresModalDismissed = saved.featuresModalDismissed ?? false
             this.vigilanteEnabled = saved.vigilanteEnabled ?? false
             this.mcpInSidebar = saved.mcpInSidebar ?? true
@@ -105,6 +189,11 @@ export const useAppStore = defineStore('app', {
       await this._persist()
     },
 
+    async setWslAutoStart(value: boolean) {
+      this.wslAutoStart = value
+      await this._persist()
+    },
+
     async setSmtp(settings: Partial<SmtpSettings>) {
       this.smtp = { ...this.smtp, ...settings }
       await this._persist()
@@ -112,6 +201,32 @@ export const useAppStore = defineStore('app', {
 
     async setContact(settings: Partial<ContactSettings>) {
       this.contact = { ...this.contact, ...settings }
+      await this._persist()
+    },
+
+    async setOpenRouter(settings: Partial<OpenRouterSettings>) {
+      this.openRouter = { ...this.openRouter, ...settings }
+      await this._persist()
+    },
+
+    async setWslProfiles(profiles: WslProfile[]) {
+      this.wslProfiles = normalizeWslProfiles(profiles)
+      await this._persist()
+    },
+
+    async setRssSources(sources: RssSource[]) {
+      this.rssSources = normalizeRssSources(sources)
+      await this._persist()
+    },
+
+    async ensureDefaultWslProfiles(defaultDistro = '') {
+      const existing = new Map(this.wslProfiles.map(profile => [profile.id, profile]))
+      this.wslProfiles = DEFAULT_WSL_PROFILES.map(profile => ({
+        ...profile,
+        distro: existing.get(profile.id)?.distro || defaultDistro,
+        homePath: existing.get(profile.id)?.homePath || profile.homePath,
+        enabled: existing.get(profile.id)?.enabled ?? profile.enabled,
+      }))
       await this._persist()
     },
 
@@ -134,8 +249,12 @@ export const useAppStore = defineStore('app', {
       const settings: AppSettings = {
         theme: this.theme,
         notificationsEnabled: this.notificationsEnabled,
+        wslAutoStart: this.wslAutoStart,
         smtp: this.smtp,
         contact: this.contact,
+        openRouter: this.openRouter,
+        wslProfiles: this.wslProfiles,
+        rssSources: this.rssSources,
         featuresModalDismissed: this.featuresModalDismissed,
         vigilanteEnabled: this.vigilanteEnabled,
         mcpInSidebar: this.mcpInSidebar,
@@ -154,3 +273,43 @@ export const useAppStore = defineStore('app', {
     },
   },
 })
+
+function normalizeWslProfiles(profiles: unknown): WslProfile[] {
+  if (!Array.isArray(profiles) || !profiles.length) {
+    return DEFAULT_WSL_PROFILES.map(profile => ({ ...profile }))
+  }
+
+  return profiles.map((profile: any, index) => ({
+    id: String(profile?.id || `profile-${index + 1}`),
+    name: String(profile?.name || 'WSL Profile'),
+    purpose: String(profile?.purpose || ''),
+    distro: String(profile?.distro || ''),
+    homePath: String(profile?.homePath || '~/vindicta'),
+    enabled: profile?.enabled !== false,
+  }))
+}
+
+function normalizeRssSources(sources: unknown): RssSource[] {
+  if (!Array.isArray(sources) || !sources.length) {
+    return DEFAULT_RSS_SOURCES.map(source => ({ ...source }))
+  }
+
+  const defaultsById = new Map(DEFAULT_RSS_SOURCES.map(source => [source.id, source]))
+  const normalized = sources
+    .map((source: any, index) => ({
+      id: String(source?.id || `rss-${index + 1}`),
+      label: String(source?.label || 'Security Feed'),
+      url: String(source?.url || ''),
+      enabled: source?.enabled !== false,
+    }))
+    .filter(source => source.url.trim())
+
+  const savedById = new Map(normalized.map(source => [source.id, source]))
+  const mergedDefaults = DEFAULT_RSS_SOURCES.map(source => ({
+    ...source,
+    ...(savedById.get(source.id) ?? {}),
+  }))
+  const custom = normalized.filter(source => !defaultsById.has(source.id))
+
+  return [...mergedDefaults, ...custom]
+}

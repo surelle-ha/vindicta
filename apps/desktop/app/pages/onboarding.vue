@@ -6,13 +6,13 @@ const router = useRouter()
 
 const name = ref(user.name)
 const email = ref(user.email)
-const jobRole = ref(user.jobRole || 'Developer')
+const jobRole = ref(user.jobRole || 'Security Practitioner')
 const projectManagementExperience = ref(user.projectManagementExperience || 'learning')
 const softwareEngineeringExperience = ref(user.softwareEngineeringExperience || 'intermediate')
 const aiToolingComfort = ref(user.aiToolingComfort || 'guided')
 const preferredPlanningStyle = ref(user.preferredPlanningStyle || 'balanced')
 
-const roles = ['Developer', 'Designer', 'Product Manager', 'QA Engineer', 'Tech Lead', 'DevOps', 'Other']
+const roles = ['Security Practitioner', 'Developer', 'DevSecOps', 'Pentester', 'Blue Team Analyst', 'Security Engineer', 'Tech Lead', 'Other']
 const projectManagementOptions = [
   { value: 'new', label: 'New to security reviews' },
   { value: 'learning', label: 'Learning vulnerability workflows' },
@@ -31,9 +31,9 @@ const aiComfortOptions = [
   { value: 'autonomous', label: 'Let AI work autonomously' },
 ]
 const planningStyleOptions = [
-  { value: 'lightweight', label: 'Lightweight and fast' },
-  { value: 'balanced', label: 'Balanced detail' },
-  { value: 'structured', label: 'Structured and thorough' },
+  { value: 'lightweight', label: 'Fast triage' },
+  { value: 'balanced', label: 'Balanced assessment' },
+  { value: 'structured', label: 'Structured evidence-first review' },
 ]
 
 function submit() {
@@ -74,8 +74,8 @@ function skip() {
     <div class="relative w-full max-w-2xl">
       <!-- Header -->
       <div class="text-center mb-8">
-        <h1 class="text-xl font-bold text-white/90 tracking-tight">Tell us about yourself</h1>
-        <p class="text-xs text-white/30 mt-2">This stays on your device. No account required.</p>
+        <h1 class="text-xl font-bold text-white/90 tracking-tight">Set up your security workspace</h1>
+        <p class="text-xs text-white/30 mt-2">Personalize the AI-powered security platform. This stays on your device.</p>
       </div>
 
       <!-- Form -->
@@ -110,7 +110,7 @@ function skip() {
           </div>
 
           <div>
-            <label class="text-xs text-white/40 font-medium mb-1.5 block">Software engineering experience</label>
+            <label class="text-xs text-white/40 font-medium mb-1.5 block">Technical experience</label>
             <GlassSelect v-model="softwareEngineeringExperience" class="w-full">
               <option v-for="option in engineeringOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
             </GlassSelect>
@@ -119,14 +119,14 @@ function skip() {
 
         <div class="grid gap-4 sm:grid-cols-2">
           <div>
-            <label class="text-xs text-white/40 font-medium mb-1.5 block">Project management experience</label>
+            <label class="text-xs text-white/40 font-medium mb-1.5 block">Security review experience</label>
             <GlassSelect v-model="projectManagementExperience" class="w-full">
               <option v-for="option in projectManagementOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
             </GlassSelect>
           </div>
 
           <div>
-            <label class="text-xs text-white/40 font-medium mb-1.5 block">Planning style</label>
+            <label class="text-xs text-white/40 font-medium mb-1.5 block">Assessment style</label>
             <GlassSelect v-model="preferredPlanningStyle" class="w-full">
               <option v-for="option in planningStyleOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
             </GlassSelect>
@@ -134,7 +134,7 @@ function skip() {
         </div>
 
         <div>
-          <label class="text-xs text-white/40 font-medium mb-1.5 block">AI assistance preference</label>
+          <label class="text-xs text-white/40 font-medium mb-1.5 block">AI security copilot preference</label>
           <GlassSelect v-model="aiToolingComfort" class="w-full">
             <option v-for="option in aiComfortOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
           </GlassSelect>
@@ -142,7 +142,7 @@ function skip() {
 
         <div class="rounded-lg border border-indigo-500/15 bg-indigo-500/[0.06] px-3 py-2.5">
           <p class="text-xs leading-relaxed text-white/45">
-            Vindicta uses this local profile to tune wording, scan depth, and how much guidance the app gives during vulnerability review.
+            Vindicta uses this local profile to tune academy guidance, scan depth, pentest workflows, and vulnerability review detail.
           </p>
         </div>
 

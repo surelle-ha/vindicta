@@ -86,11 +86,82 @@ const features = [
     icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z',
   },
   {
+    title: 'Security Academy',
+    badge: '30 Lessons',
+    badgeColor: 'accent',
+    desc: 'A structured bootcamp from security fundamentals to penetration testing. AI-guided by Professor Vindicta with a completion certificate.',
+    icon: 'M12 14l9-5-9-5-9 5 9 5zm0 0l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z',
+  },
+  {
     title: 'No Subscription',
     badge: 'Free',
     badgeColor: 'ok',
     desc: 'Free to download, free to use forever. No accounts, no telemetry, no data ever leaves your machine.',
     icon: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z',
+  },
+]
+
+// ── Academy curriculum ─────────────────────────────────────────────────────
+const academyPhases = [
+  {
+    label: 'Intro',
+    theme: 'Getting Started',
+    lessons: 4,
+    color: 'text-teal-300',
+    bg: 'rgba(20,184,166,0.10)',
+    border: 'rgba(20,184,166,0.25)',
+    glow: 'rgba(20,184,166,0.15)',
+    topics: ['Course orientation', 'How the AI Professor works', 'Terminal & lab setup', 'Setting your goals'],
+  },
+  {
+    label: 'Week 1',
+    theme: 'Security Foundations',
+    lessons: 7,
+    color: 'text-indigo-300',
+    bg: 'rgba(99,102,241,0.10)',
+    border: 'rgba(99,102,241,0.25)',
+    glow: 'rgba(99,102,241,0.15)',
+    topics: ['CIA triad & threat modelling', 'Auth & access control', 'Cryptography basics', 'Secure SDLC', 'OWASP Top 10 intro'],
+  },
+  {
+    label: 'Week 2',
+    theme: 'Web App Security',
+    lessons: 7,
+    color: 'text-violet-300',
+    bg: 'rgba(139,92,246,0.10)',
+    border: 'rgba(139,92,246,0.25)',
+    glow: 'rgba(139,92,246,0.15)',
+    topics: ['SQL injection & XSS', 'CSRF & SSRF', 'Insecure deserialization', 'API security', 'Burp Suite basics'],
+  },
+  {
+    label: 'Week 3',
+    theme: 'Penetration Testing',
+    lessons: 7,
+    color: 'text-rose-300',
+    bg: 'rgba(244,63,94,0.10)',
+    border: 'rgba(244,63,94,0.25)',
+    glow: 'rgba(244,63,94,0.15)',
+    topics: ['Recon & footprinting', 'Network scanning', 'Exploitation basics', 'Privilege escalation', 'Report writing'],
+  },
+  {
+    label: 'Week 4',
+    theme: 'Defensive Security',
+    lessons: 7,
+    color: 'text-emerald-300',
+    bg: 'rgba(16,185,129,0.10)',
+    border: 'rgba(16,185,129,0.25)',
+    glow: 'rgba(16,185,129,0.15)',
+    topics: ['Logging & SIEM', 'IDS/IPS setup', 'Incident response', 'Hardening & patching', 'Blue team tactics'],
+  },
+  {
+    label: 'Capstone',
+    theme: 'Full Assessment',
+    lessons: 2,
+    color: 'text-amber-300',
+    bg: 'rgba(245,158,11,0.10)',
+    border: 'rgba(245,158,11,0.25)',
+    glow: 'rgba(245,158,11,0.15)',
+    topics: ['End-to-end pentest simulation', 'Certificate of completion'],
   },
 ]
 
@@ -146,6 +217,7 @@ const badgeClass: Record<string, string> = {
       <div class="flex items-center gap-6 text-[13px] text-white/50">
         <a href="#features" class="hidden sm:inline hover:text-white transition-colors">Features</a>
         <a href="#scans"    class="hidden sm:inline hover:text-white transition-colors">Scans</a>
+        <a href="#academy"  class="hidden sm:inline hover:text-white transition-colors">Academy</a>
         <a href="#download" class="hidden sm:inline hover:text-white transition-colors">Download</a>
         <a href="https://github.com/surelle-ha/vindicta" target="_blank" rel="noopener"
           class="hover:text-white transition-colors">GitHub</a>
@@ -195,7 +267,7 @@ const badgeClass: Record<string, string> = {
           </div>
           <div class="inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/40 px-4 py-1.5 text-[11px] font-medium uppercase tracking-widest text-white/50 backdrop-blur-sm">
             <span class="h-1.5 w-1.5 rounded-full bg-ok animate-pulse" />
-            Local-first · Offline · Free · Open Source
+            Scan · Learn · Defend · Offline · Free
           </div>
         </div>
 
@@ -218,8 +290,8 @@ const badgeClass: Record<string, string> = {
           class="animate-fade-up mt-7 max-w-lg text-[15px] sm:text-[17px] leading-relaxed text-white/60"
           style="animation-delay:0.45s"
         >
-          Local-first AI security for codebases. Scan, find, fix —<br class="hidden sm:inline" />
-          all on your machine. No cloud, no account.
+          AI security workspace and learning platform.<br class="hidden sm:inline" />
+          Scan codebases, track findings, and master security — all on your machine.
         </p>
 
         <!-- CTA buttons -->
@@ -272,7 +344,9 @@ const badgeClass: Record<string, string> = {
           <span>Findings Tracker</span><span class="text-accent/40">·</span>
           <span>Dependency Inventory</span><span class="text-accent/40">·</span>
           <span>Secret Detection</span><span class="text-accent/40">·</span>
-          <span>Portable Scan Records</span><span class="text-accent/40">·</span>
+          <span>Security Academy</span><span class="text-accent/40">·</span>
+          <span>30 Lessons</span><span class="text-accent/40">·</span>
+          <span>AI Professor</span><span class="text-accent/40">·</span>
           <span>100% Offline</span><span class="text-accent/40">·</span>
           <span>Free Forever</span><span class="text-accent/40">·</span>
         </template>
@@ -374,6 +448,143 @@ const badgeClass: Record<string, string> = {
             </div>
           </div>
         </div>
+      </div>
+    </section>
+
+    <!-- ── Academy ──────────────────────────────────────────────────────────── -->
+    <section id="academy" class="px-6 py-24 border-t border-white/5">
+      <div class="max-w-6xl mx-auto">
+
+        <!-- Header -->
+        <div
+          data-reveal="academy-header"
+          :class="['transition-all duration-700 mb-16', isRevealed('academy-header') ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6']"
+        >
+          <div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6">
+            <div>
+              <p class="text-[11px] font-semibold uppercase tracking-[0.3em] text-accent/70 mb-3">Built-in learning</p>
+              <h2 class="text-[36px] sm:text-[44px] font-display font-black uppercase leading-tight">
+                Vindicta Academy.<br/>
+                <span class="text-white/30">From zero to pentest.</span>
+              </h2>
+              <p class="mt-4 max-w-xl text-[14px] leading-relaxed text-white/45">
+                A structured 30-lesson security bootcamp built right into the app. Learn security fundamentals, web attack vectors, penetration testing, and defensive tactics — guided by an AI professor.
+              </p>
+            </div>
+            <!-- Stats -->
+            <div class="flex items-center gap-6 shrink-0">
+              <div class="text-center">
+                <p class="text-[32px] font-black text-white leading-none">30</p>
+                <p class="text-[10px] font-semibold uppercase tracking-wider text-white/30 mt-1">Lessons</p>
+              </div>
+              <div class="w-px h-10 bg-white/10" />
+              <div class="text-center">
+                <p class="text-[32px] font-black text-white leading-none">~45h</p>
+                <p class="text-[10px] font-semibold uppercase tracking-wider text-white/30 mt-1">Content</p>
+              </div>
+              <div class="w-px h-10 bg-white/10" />
+              <div class="text-center">
+                <p class="text-[32px] font-black text-white leading-none">1</p>
+                <p class="text-[10px] font-semibold uppercase tracking-wider text-white/30 mt-1">Certificate</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Curriculum phase cards -->
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div
+            v-for="(phase, i) in academyPhases"
+            :key="phase.label"
+            :data-reveal="`phase-${i}`"
+            :class="['transition-all duration-700', isRevealed(`phase-${i}`) ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8']"
+            :style="{ transitionDelay: `${i * 70}ms`, borderColor: phase.border, background: phase.bg }"
+            class="group relative rounded-2xl border p-5 overflow-hidden hover:-translate-y-1 transition-all duration-300"
+          >
+            <!-- Glow -->
+            <div
+              class="absolute -top-10 -right-10 h-36 w-36 rounded-full blur-3xl pointer-events-none opacity-60"
+              :style="{ backgroundColor: phase.glow }"
+            />
+            <div class="relative z-10">
+              <!-- Label row -->
+              <div class="flex items-center justify-between mb-3">
+                <span
+                  class="text-[9px] font-bold uppercase tracking-[0.2em] px-2 py-0.5 rounded-full border"
+                  :class="phase.color"
+                  :style="{ borderColor: phase.border, background: phase.bg }"
+                >
+                  {{ phase.label }}
+                </span>
+                <span class="text-[10px] text-white/25 font-mono">{{ phase.lessons }} lessons</span>
+              </div>
+
+              <h3 class="text-[15px] font-bold text-white mb-3">{{ phase.theme }}</h3>
+
+              <!-- Topics -->
+              <ul class="space-y-1.5">
+                <li
+                  v-for="topic in phase.topics"
+                  :key="topic"
+                  class="flex items-start gap-2 text-[11px] text-white/45"
+                >
+                  <svg class="h-3 w-3 mt-0.5 shrink-0" :class="phase.color" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+                  </svg>
+                  {{ topic }}
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <!-- Professor Vindicta + TTS callout -->
+        <div
+          data-reveal="academy-footer"
+          :class="['transition-all duration-700 mt-8', isRevealed('academy-footer') ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6']"
+        >
+          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+
+            <!-- Professor Vindicta -->
+            <div class="col-span-1 lg:col-span-2 rounded-2xl border border-accent/20 bg-accent/5 p-6 flex items-start gap-5">
+              <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-accent/15 border border-accent/25">
+                <svg class="h-6 w-6 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23-.693L5 14.5m14.8.8l1.402 1.402c1 1 .3 2.7-1.1 2.7H3.9c-1.4 0-2.1-1.7-1.1-2.7L4.2 15.3" />
+                </svg>
+              </div>
+              <div>
+                <p class="text-[13px] font-bold text-white">Professor Vindicta — AI Tutor</p>
+                <p class="mt-1.5 text-[12px] leading-relaxed text-white/50">
+                  An AI professor powered by Claude, Codex, or OpenRouter sits alongside every lesson. It teaches interactively, asks quiz questions, and only unlocks the next lesson once you demonstrate real understanding — not just reading.
+                </p>
+                <div class="mt-3 flex flex-wrap gap-2">
+                  <span class="rounded-full bg-accent/10 border border-accent/20 px-2.5 py-0.5 text-[10px] font-semibold text-accent">Claude</span>
+                  <span class="rounded-full bg-white/5 border border-white/10 px-2.5 py-0.5 text-[10px] font-semibold text-white/40">Codex</span>
+                  <span class="rounded-full bg-white/5 border border-white/10 px-2.5 py-0.5 text-[10px] font-semibold text-white/40">OpenRouter</span>
+                  <span class="rounded-full bg-ok/10 border border-ok/20 px-2.5 py-0.5 text-[10px] font-semibold text-ok">Professor-gated completion</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Audio narration -->
+            <div class="rounded-2xl border border-white/5 bg-surface/60 p-6 flex flex-col justify-between gap-4">
+              <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-ok/10 border border-ok/20">
+                <svg class="h-5 w-5 text-ok" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                </svg>
+              </div>
+              <div>
+                <p class="text-[13px] font-bold text-white">Audio Narration</p>
+                <p class="mt-1.5 text-[12px] leading-relaxed text-white/50">
+                  Generate full offline narrations for any lesson. Uses an on-device TTS engine — listen while you work.
+                </p>
+              </div>
+              <span class="self-start rounded-full bg-ok/10 border border-ok/20 px-2.5 py-0.5 text-[10px] font-semibold text-ok">On-device · No API key</span>
+            </div>
+
+          </div>
+        </div>
+
       </div>
     </section>
 
