@@ -14,10 +14,10 @@ const preferredPlanningStyle = ref(user.preferredPlanningStyle || 'balanced')
 
 const roles = ['Developer', 'Designer', 'Product Manager', 'QA Engineer', 'Tech Lead', 'DevOps', 'Other']
 const projectManagementOptions = [
-  { value: 'new', label: 'New to project management' },
-  { value: 'learning', label: 'Learning agile workflows' },
-  { value: 'comfortable', label: 'Comfortable planning sprints' },
-  { value: 'advanced', label: 'Advanced delivery lead' },
+  { value: 'new', label: 'New to security reviews' },
+  { value: 'learning', label: 'Learning vulnerability workflows' },
+  { value: 'comfortable', label: 'Comfortable triaging findings' },
+  { value: 'advanced', label: 'Advanced security lead' },
 ]
 const engineeringOptions = [
   { value: 'beginner', label: 'Beginner' },
@@ -142,7 +142,7 @@ function skip() {
 
         <div class="rounded-lg border border-indigo-500/15 bg-indigo-500/[0.06] px-3 py-2.5">
           <p class="text-xs leading-relaxed text-white/45">
-            Vindicta uses this local profile to tune wording, planning depth, and how much guidance the app gives during sprint and ticket creation.
+            Vindicta uses this local profile to tune wording, scan depth, and how much guidance the app gives during vulnerability review.
           </p>
         </div>
 

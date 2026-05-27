@@ -13,10 +13,19 @@ export interface SmtpSettings {
   fromEmail: string
 }
 
+export interface ContactSettings {
+  githubRepo: string
+  githubToken: string
+}
+
 interface AppSettings {
   theme: AppTheme
   notificationsEnabled: boolean
   smtp: SmtpSettings
+  contact: ContactSettings
+  featuresModalDismissed: boolean
+  vigilanteEnabled: boolean
+  mcpInSidebar: boolean
 }
 
 const DEFAULT_SMTP: SmtpSettings = {
@@ -30,12 +39,21 @@ const DEFAULT_SMTP: SmtpSettings = {
   fromEmail: '',
 }
 
+const DEFAULT_CONTACT: ContactSettings = {
+  githubRepo: 'Surelle-ha/vindicta',
+  githubToken: '',
+}
+
 export const useAppStore = defineStore('app', {
   state: (): AppSettings & { launched: boolean } => ({
     launched: false,
     theme: 'dark',
     notificationsEnabled: true,
     smtp: { ...DEFAULT_SMTP },
+    contact: { ...DEFAULT_CONTACT },
+    featuresModalDismissed: false,
+    vigilanteEnabled: false,
+    mcpInSidebar: true,
   }),
 
   actions: {
@@ -48,6 +66,10 @@ export const useAppStore = defineStore('app', {
           this.theme = saved.theme ?? 'dark'
           this.notificationsEnabled = saved.notificationsEnabled ?? true
           this.smtp = { ...DEFAULT_SMTP, ...(saved.smtp ?? {}) }
+          this.contact = { ...DEFAULT_CONTACT, ...(saved.contact ?? {}) }
+          this.featuresModalDismissed = saved.featuresModalDismissed ?? false
+          this.vigilanteEnabled = saved.vigilanteEnabled ?? false
+          this.mcpInSidebar = saved.mcpInSidebar ?? true
         }
       }
       catch {
@@ -58,6 +80,10 @@ export const useAppStore = defineStore('app', {
             this.theme = saved.theme ?? 'dark'
             this.notificationsEnabled = saved.notificationsEnabled ?? true
             this.smtp = { ...DEFAULT_SMTP, ...(saved.smtp ?? {}) }
+            this.contact = { ...DEFAULT_CONTACT, ...(saved.contact ?? {}) }
+            this.featuresModalDismissed = saved.featuresModalDismissed ?? false
+            this.vigilanteEnabled = saved.vigilanteEnabled ?? false
+            this.mcpInSidebar = saved.mcpInSidebar ?? true
           }
           catch { /* ignore */ }
         }
@@ -84,11 +110,35 @@ export const useAppStore = defineStore('app', {
       await this._persist()
     },
 
+    async setContact(settings: Partial<ContactSettings>) {
+      this.contact = { ...this.contact, ...settings }
+      await this._persist()
+    },
+
+    async dismissFeaturesModal() {
+      this.featuresModalDismissed = true
+      await this._persist()
+    },
+
+    async setVigilante(value: boolean) {
+      this.vigilanteEnabled = value
+      await this._persist()
+    },
+
+    async setMcpInSidebar(value: boolean) {
+      this.mcpInSidebar = value
+      await this._persist()
+    },
+
     async _persist() {
       const settings: AppSettings = {
         theme: this.theme,
         notificationsEnabled: this.notificationsEnabled,
         smtp: this.smtp,
+        contact: this.contact,
+        featuresModalDismissed: this.featuresModalDismissed,
+        vigilanteEnabled: this.vigilanteEnabled,
+        mcpInSidebar: this.mcpInSidebar,
       }
       try {
         const { useTauriStore } = await import('~/composables/useTauriStore')

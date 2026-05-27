@@ -1,7 +1,7 @@
 <script setup lang="ts">
 const wizard = useWizardStore()
 
-const stepLabels = ['Project Source', 'Code Editor', 'AI Tool']
+const stepLabels = ['Project Source', 'AI Tool']
 </script>
 
 <template>
@@ -47,8 +47,7 @@ const stepLabels = ['Project Source', 'Code Editor', 'AI Tool']
     <!-- Step content -->
     <div class="flex-1">
       <StepDirectory v-if="wizard.currentStep === 0" />
-      <StepEditor v-else-if="wizard.currentStep === 1" />
-      <StepAITool v-else-if="wizard.currentStep === 2" />
+      <StepAITool v-else-if="wizard.currentStep === 1" />
     </div>
 
     <!-- Actions -->

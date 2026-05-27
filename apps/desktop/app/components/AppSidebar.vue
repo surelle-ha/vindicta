@@ -1,37 +1,89 @@
 <script setup lang="ts">
-import { Check, ChevronDown, House, FolderKanban, UserCircle2, Settings, Sun, Moon, PanelLeftClose, PanelLeftOpen, Server, ShieldCheck, Map } from 'lucide-vue-next'
+import {
+  AlertTriangle,
+  Bot,
+  Check,
+  ChevronDown,
+  Clock3,
+  FileText,
+  Files,
+  GraduationCap,
+  House,
+  KeyRound,
+  Moon,
+  PackageSearch,
+  PanelLeftClose,
+  Plug,
+  Radar,
+  Server,
+  Settings,
+  ShieldCheck,
+  Sun,
+  Swords,
+  Terminal,
+  UserCircle2,
+} from 'lucide-vue-next'
 
 const route = useRoute()
 const router = useRouter()
 const projects = useProjectsStore()
 const app = useAppStore()
 const collapsed = useState('sidebar-collapsed', () => false)
+const workspaceExpanded = useState('sidebar-workspace-expanded', () => true)
 const projectSelectorOpen = ref(false)
 
 const navItems = [
-  { icon: House,            label: 'Home',      to: '/', exact: true },
-  { icon: UserCircle2,     label: 'Profile',   to: '/profile', exact: true },
+  { icon: House,          label: 'Home',     to: '/',         exact: true },
+  { icon: Terminal,       label: 'Terminal', to: '/terminal', exact: true },
+  { icon: UserCircle2,    label: 'Profile',  to: '/profile',  exact: true },
+  { icon: GraduationCap,  label: 'Academy',  to: '/academy',  exact: true },
+]
+
+// Workspace sub-tabs matching the SecurityWorkspace tabs
+// `link` = navigate to absolute path; null = navigate via ?tab= query param
+const workspaceTabs = [
+  { id: 'overview',      label: 'Overview',      icon: ShieldCheck,   link: null as string | null },
+  { id: 'scanner',       label: 'Scanner',       icon: Radar,          link: null as string | null },
+  { id: 'findings',      label: 'Findings',      icon: AlertTriangle,  link: null as string | null },
+  { id: 'dependencies',  label: 'Dependencies',  icon: PackageSearch,  link: null as string | null },
+  { id: 'secrets',       label: 'Secrets',       icon: KeyRound,       link: null as string | null },
+  { id: 'reports',       label: 'Reports',       icon: FileText,       link: null as string | null },
+  { id: 'history',       label: 'History',       icon: Clock3,         link: null as string | null },
+  { id: 'documents',     label: 'Documents',     icon: Files,          link: '/documents' },
+  { id: 'settings',      label: 'Settings',      icon: Settings,       link: null as string | null },
 ]
 
 const activeProject = computed(() => projects.activeProject)
-const projectToolItems = computed(() => [
-  {
-    icon: FolderKanban,
-    label: activeProject.value ? 'Project Workspace' : 'Project Workspace',
-    to: activeProject.value ? `/projects/${activeProject.value.id}` : '/',
-    exact: false,
-    disabled: !activeProject.value,
-  },
-  { icon: Map, label: 'Roadmap', to: '/roadmap', exact: true, disabled: false },
-  { icon: ShieldCheck, label: 'Security Analyzer', to: '/security', exact: true, disabled: false },
-])
+const isOnWorkspace = computed(() => activeProject.value && route.path.startsWith(`/projects/${activeProject.value.id}`))
+const activeTabFromRoute = computed(() => (route.query.tab as string) || 'overview')
 
-const appToolItems = [
-  { icon: Server, label: 'Service Controller', to: '/services', exact: true, disabled: false },
-]
+// Only Pentest remains project-specific; MCP is now in the top nav
+const projectToolItems = computed(() => {
+  const items: { icon: any; label: string; to: string; exact: boolean; disabled: boolean }[] = []
+  if (activeProject.value?.pentestEnabled) {
+    items.push({
+      icon: Swords,
+      label: 'Pentest',
+      to: '/pentest',
+      exact: true,
+      disabled: false,
+    })
+  }
+  return items
+})
 
 function isActive(item: { to: string; exact?: boolean }) {
   return item.exact ? route.path === item.to : route.path.startsWith(item.to)
+}
+
+function isTabActive(tab: { id: string; link: string | null }) {
+  if (tab.link) return route.path === tab.link
+  return isOnWorkspace.value && activeTabFromRoute.value === tab.id
+}
+
+function goToTab(tabId: string) {
+  if (!activeProject.value) return
+  void router.push(`/projects/${activeProject.value.id}?tab=${tabId}`)
 }
 
 function selectProject(id: string) {
@@ -66,11 +118,7 @@ watch(() => route.fullPath, () => {
     <!-- Logo + collapse toggle -->
     <div class="h-11 px-3 flex items-center border-b border-[var(--border)]" :class="collapsed ? 'justify-center' : 'gap-2'">
       <template v-if="!collapsed">
-        <div class="vindicta-mark size-6 shrink-0" aria-hidden="true">
-          <span class="vindicta-mark__slash vindicta-mark__slash--left" />
-          <span class="vindicta-mark__slash vindicta-mark__slash--right" />
-          <span class="vindicta-mark__core" />
-        </div>
+        <img src="/icon.png" alt="" class="size-6 shrink-0 rounded-md object-cover" draggable="false">
         <span class="flex-1 text-sm font-semibold text-[var(--text)] tracking-tight truncate opacity-80">Vindicta</span>
       </template>
       <button
@@ -79,12 +127,13 @@ watch(() => route.fullPath, () => {
         @click="collapsed = !collapsed"
       >
         <PanelLeftClose v-if="!collapsed" class="size-3.5" />
-        <PanelLeftOpen v-else class="size-3.5" />
+        <img v-else src="/icon.png" alt="" class="size-6 rounded-md object-cover" draggable="false">
       </button>
     </div>
 
     <!-- Nav -->
     <nav class="flex-1 p-2 space-y-0.5 overflow-y-auto overflow-x-hidden custom-scroll">
+      <!-- Top nav -->
       <NuxtLink
         v-for="item in navItems"
         :key="item.to"
@@ -102,12 +151,100 @@ watch(() => route.fullPath, () => {
         <span v-if="!collapsed">{{ item.label }}</span>
       </NuxtLink>
 
-      <!-- Project tools section -->
+      <!-- MCP (shown below Academy when enabled in settings) -->
+      <NuxtLink
+        v-if="app.mcpInSidebar"
+        to="/mcp"
+        class="flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors"
+        :class="[
+          collapsed ? 'justify-center' : '',
+          route.path === '/mcp'
+            ? 'bg-indigo-600/15 text-indigo-400'
+            : 'text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-white/[0.05]',
+        ]"
+        :title="collapsed ? 'MCP' : undefined"
+      >
+        <Plug class="size-3.5 shrink-0" />
+        <span v-if="!collapsed">MCP</span>
+      </NuxtLink>
+
+      <!-- Core section -->
       <div class="pt-3">
         <p v-if="!collapsed" class="px-2 mb-1 text-[10px] font-semibold text-[var(--text-faint)] uppercase tracking-[0.12em]">
-          Project Tools
+          Project Specific
         </p>
         <div v-else class="h-px bg-[var(--border)] mx-1 mb-2" />
+
+        <!-- Workspace row with expand toggle -->
+        <div>
+          <div class="flex items-center gap-0.5">
+            <NuxtLink
+              :to="activeProject ? `/projects/${activeProject.id}` : '/'"
+              class="flex flex-1 items-center gap-2 px-2 py-1.5 rounded-md text-xs transition-colors"
+              :class="[
+                collapsed ? 'justify-center' : '',
+                !activeProject ? 'pointer-events-none opacity-45' : '',
+                activeProject && isOnWorkspace
+                  ? 'bg-indigo-600/15 text-indigo-400'
+                  : 'text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-white/[0.05]',
+              ]"
+              :title="collapsed ? 'Workspace' : undefined"
+            >
+              <ShieldCheck class="size-3.5 shrink-0 text-violet-400/70" />
+              <span v-if="!collapsed" class="truncate flex-1">Workspace</span>
+            </NuxtLink>
+            <!-- Expand toggle (only in expanded sidebar, only when project active) -->
+            <button
+              v-if="!collapsed && activeProject"
+              class="size-5 flex items-center justify-center rounded text-[var(--text-faint)] hover:text-[var(--text)] hover:bg-white/[0.06] transition-colors shrink-0 mr-1"
+              :title="workspaceExpanded ? 'Hide tabs' : 'Show tabs'"
+              @click.stop="workspaceExpanded = !workspaceExpanded"
+            >
+              <ChevronDown class="size-3 transition-transform" :class="workspaceExpanded ? '' : '-rotate-90'" />
+            </button>
+          </div>
+
+          <!-- Sub-tabs (collapsible) -->
+          <Transition
+            enter-active-class="transition-all duration-150 ease-out overflow-hidden"
+            enter-from-class="max-h-0 opacity-0"
+            enter-to-class="max-h-96 opacity-100"
+            leave-active-class="transition-all duration-150 ease-in overflow-hidden"
+            leave-from-class="max-h-96 opacity-100"
+            leave-to-class="max-h-0 opacity-0"
+          >
+            <div v-if="!collapsed && activeProject && workspaceExpanded" class="ml-3 mt-0.5 space-y-0.5 border-l border-[var(--border)] pl-2">
+              <template v-for="tab in workspaceTabs" :key="tab.id">
+                <!-- Direct-link tabs (e.g. Documents) -->
+                <NuxtLink
+                  v-if="tab.link"
+                  :to="tab.link"
+                  class="flex w-full items-center gap-2 px-2 py-1 rounded-md text-[11px] transition-colors"
+                  :class="isTabActive(tab)
+                    ? 'bg-indigo-600/15 text-indigo-400'
+                    : 'text-[var(--text-faint)] hover:text-[var(--text-muted)] hover:bg-white/[0.04]'"
+                >
+                  <component :is="tab.icon" class="size-3 shrink-0" />
+                  <span class="truncate">{{ tab.label }}</span>
+                </NuxtLink>
+                <!-- Query-param tabs -->
+                <button
+                  v-else
+                  class="flex w-full items-center gap-2 px-2 py-1 rounded-md text-[11px] transition-colors"
+                  :class="isTabActive(tab)
+                    ? 'bg-indigo-600/15 text-indigo-400'
+                    : 'text-[var(--text-faint)] hover:text-[var(--text-muted)] hover:bg-white/[0.04]'"
+                  @click="goToTab(tab.id)"
+                >
+                  <component :is="tab.icon" class="size-3 shrink-0" />
+                  <span class="truncate">{{ tab.label }}</span>
+                </button>
+              </template>
+            </div>
+          </Transition>
+        </div>
+
+        <!-- Other core items (Pentest — only if enabled on project) -->
         <NuxtLink
           v-for="item in projectToolItems"
           :key="item.to + item.label"
@@ -127,27 +264,26 @@ watch(() => route.fullPath, () => {
         </NuxtLink>
       </div>
 
-      <!-- App tools section -->
+      <!-- Infrastructure section -->
       <div class="pt-3">
         <p v-if="!collapsed" class="px-2 mb-1 text-[10px] font-semibold text-[var(--text-faint)] uppercase tracking-[0.12em]">
-          App Tools
+          Infrastructure
         </p>
         <div v-else class="h-px bg-[var(--border)] mx-1 mb-2" />
+
         <NuxtLink
-          v-for="item in appToolItems"
-          :key="item.to + item.label"
-          :to="item.to"
+          to="/server-hardening"
           class="flex items-center gap-2 px-2 py-1.5 rounded-md text-xs transition-colors"
           :class="[
             collapsed ? 'justify-center' : '',
-            !item.disabled && isActive(item)
+            route.path === '/server-hardening'
               ? 'bg-indigo-600/15 text-indigo-400'
               : 'text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-white/[0.05]',
           ]"
-          :title="collapsed ? item.label : undefined"
+          :title="collapsed ? 'Server Hardening' : undefined"
         >
-          <component :is="item.icon" class="size-3.5 shrink-0 text-violet-400/70" />
-          <span v-if="!collapsed" class="truncate">{{ item.label }}</span>
+          <Server class="size-3.5 shrink-0 text-emerald-400/70" />
+          <span v-if="!collapsed" class="truncate">Server Hardening</span>
         </NuxtLink>
       </div>
     </nav>
@@ -204,7 +340,7 @@ watch(() => route.fullPath, () => {
         class="flex h-8 items-center justify-center rounded-md text-[var(--text-faint)] hover:bg-white/[0.05] hover:text-[var(--text)]"
         :title="activeProject?.name ?? 'Select project'"
       >
-        <FolderKanban class="size-3.5" />
+        <ShieldCheck class="size-3.5" />
       </NuxtLink>
     </div>
 
@@ -219,6 +355,20 @@ watch(() => route.fullPath, () => {
       <Moon v-else class="size-3.5 shrink-0" />
       <span v-if="!collapsed" class="text-xs">{{ app.theme === 'dark' ? 'Light mode' : 'Dark mode' }}</span>
     </button>
+
+    <!-- AI Models link -->
+    <NuxtLink
+      to="/ai-models"
+      class="h-9 flex items-center gap-2 px-3 border-t border-[var(--border)] text-[var(--text-faint)] hover:text-[var(--text)] hover:bg-white/[0.03] transition-colors"
+      :class="[
+        collapsed ? 'justify-center' : '',
+        route.path === '/ai-models' ? 'bg-indigo-600/10 text-indigo-400' : '',
+      ]"
+      :title="collapsed ? 'AI Models' : undefined"
+    >
+      <Bot class="size-3.5 shrink-0" />
+      <span v-if="!collapsed" class="text-xs">AI Models</span>
+    </NuxtLink>
 
     <!-- Settings link -->
     <NuxtLink
@@ -235,59 +385,3 @@ watch(() => route.fullPath, () => {
     </NuxtLink>
   </aside>
 </template>
-
-<style scoped>
-.vindicta-mark {
-  position: relative;
-  overflow: hidden;
-  border-radius: 0.45rem;
-  background:
-    radial-gradient(circle at 30% 20%, rgba(103, 232, 249, 0.9), transparent 28%),
-    radial-gradient(circle at 72% 80%, rgba(167, 139, 250, 0.85), transparent 32%),
-    linear-gradient(135deg, #18123f 0%, #4f46e5 58%, #0891b2 100%);
-  box-shadow: 0 8px 20px rgba(79, 70, 229, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.22);
-}
-
-.vindicta-mark::after {
-  content: "";
-  position: absolute;
-  inset: 1px;
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  border-radius: inherit;
-  pointer-events: none;
-}
-
-.vindicta-mark__slash {
-  position: absolute;
-  top: 4px;
-  width: 3px;
-  height: 16px;
-  border-radius: 9999px;
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 0 12px rgba(255, 255, 255, 0.28);
-  transform-origin: center;
-}
-
-.vindicta-mark__slash--left {
-  left: 7px;
-  transform: rotate(-23deg);
-}
-
-.vindicta-mark__slash--right {
-  right: 7px;
-  background: #a5f3fc;
-  transform: rotate(23deg);
-}
-
-.vindicta-mark__core {
-  position: absolute;
-  left: 50%;
-  bottom: 5px;
-  width: 4px;
-  height: 4px;
-  border-radius: 9999px;
-  background: #fff;
-  box-shadow: 0 0 12px rgba(165, 243, 252, 0.85);
-  transform: translateX(-50%);
-}
-</style>

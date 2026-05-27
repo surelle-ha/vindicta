@@ -16,16 +16,16 @@
 }
 
 :root[data-theme="light"] {
-  --bg-base:    #c9ced8;
-  --bg-surface: #d9dde5;
-  --bg-card:    rgba(15,23,42,0.07);
-  --border:     rgba(15,23,42,0.14);
-  --border-hi:  rgba(15,23,42,0.24);
-  --text:       rgba(15,23,42,0.92);
-  --text-muted: rgba(15,23,42,0.62);
-  --text-faint: rgba(15,23,42,0.42);
-  --scrollbar-thumb: rgba(15,23,42,0.18);
-  --scrollbar-thumb-hover: rgba(15,23,42,0.32);
+  --bg-base:    #f1f3f7;
+  --bg-surface: #ffffff;
+  --bg-card:    rgba(15,23,42,0.035);
+  --border:     rgba(15,23,42,0.09);
+  --border-hi:  rgba(15,23,42,0.16);
+  --text:       rgba(15,23,42,0.90);
+  --text-muted: rgba(15,23,42,0.55);
+  --text-faint: rgba(15,23,42,0.32);
+  --scrollbar-thumb: rgba(15,23,42,0.14);
+  --scrollbar-thumb-hover: rgba(15,23,42,0.26);
 }
 
 /* ── Brand colors ───────────────────────────────────────────────── */

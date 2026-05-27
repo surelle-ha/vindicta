@@ -11,8 +11,19 @@ export function useTauriWindow() {
     return _win
   }
 
+  async function forceClose() {
+    const win = await getWin()
+    if (win) await win.close()
+  }
+
+  async function hideWindow() {
+    const win = await getWin()
+    if (win) await win.hide()
+  }
+
   return {
-    close: () => getWin().then((w) => w?.close()),
+    forceClose,
+    hideWindow,
     minimize: () => getWin().then((w) => w?.minimize()),
     toggleMaximize: () => getWin().then((w) => w?.toggleMaximize()),
   }

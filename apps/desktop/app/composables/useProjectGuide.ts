@@ -92,18 +92,18 @@ function buildMessages(project: ProjectMeta, readme: string, fileName: string) {
   }
 
   if (headings.length) {
-    messages.push(`${guide} found these README areas: ${headings.join(', ')}. Turn the next uncertain item into a ticket, then move it through the board as work progresses.`)
+    messages.push(`${guide} found these README areas: ${headings.join(', ')}. Use them to scope security review, dependency checks, and remediation evidence.`)
   }
 
   if (setupCommand) {
-    messages.push(`README hint: \`${setupCommand}\` looks useful for local setup or verification. Capture setup gaps as tickets so the project stays repeatable.`)
+    messages.push(`README hint: \`${setupCommand}\` looks useful for local setup or verification. Review setup gaps because repeatability often affects security confidence.`)
   }
 
   if (actionItem) {
-    messages.push(`README task signal: ${trimSentence(actionItem, 160)}. You can add this as a ticket, assign it to a sprint, then use the Board queue to decide what the AI should pick up next.`)
+    messages.push(`README task signal: ${trimSentence(actionItem, 160)}. Consider whether it changes the scan scope, threat surface, or remediation queue.`)
   }
 
-  messages.push(`Vindicta flow: start in Info for README context, keep work in Tickets, group focused work into Sprints, and use Board Columns or Queue to guide execution.`)
+  messages.push('Vindicta flow: review the overview, run Scanner, convert confirmed risks into Findings, then export Reports when the evidence is ready.')
 
   return messages
 }
@@ -142,7 +142,7 @@ export function useProjectGuide(project: ComputedRef<ProjectMeta>) {
     else {
       messages.value = [
         `${toolName(project.value)} is ready for ${project.value.name}. Add README.md notes and they will start appearing here automatically.`,
-        'Vindicta flow: read Info, create tickets, organize sprints, move work on the board, and use Queue to line up AI-ready work.',
+        'Vindicta flow: scan the project, review evidence, create remediation findings, and keep reports current.',
       ]
     }
     messageIndex.value = 0
@@ -175,8 +175,8 @@ export function useProjectGuide(project: ComputedRef<ProjectMeta>) {
     }
     catch {
       messages.value = [
-        `${toolName(project.value)} tried to read README.md but could not access it yet. The project tabs still work while this refreshes.`,
-        'Vindicta flow: use Info for context, Tickets for work items, Sprints for focus, and Board for progress or AI queueing.',
+        `${toolName(project.value)} tried to read README.md but could not access it yet. The security tabs still work while this refreshes.`,
+        'Vindicta flow: use Overview for context, Scanner for AI review, Findings for remediation, and Reports for audit output.',
       ]
       messageIndex.value = 0
     }

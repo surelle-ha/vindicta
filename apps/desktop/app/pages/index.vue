@@ -1,12 +1,11 @@
 <script setup lang="ts">
 import {
   ArrowRight,
-  Award,
+  AlertTriangle,
   BookOpen,
   CalendarDays,
   CheckCircle2,
   FolderOpen,
-  Newspaper,
   Plus,
   Rocket,
   ShieldCheck,
@@ -17,45 +16,51 @@ import {
 import { deriveProjectCode } from '~/utils/ticket'
 
 const projects = useProjectsStore()
+const security = useSecurityStore()
 const wizard = useWizardStore()
 const { createProject } = useVindictaJson()
 const { notify } = useNotifications()
 
 onMounted(async () => {
   await projects.loadProjects()
+  await loadActiveSecurity()
 })
 
 const activeProject = computed(() => projects.activeProject)
-const toolCount = computed(() => activeProject.value?.aiTools?.length || (activeProject.value?.aiTool ? 1 : 0))
+const latestScanLabel = computed(() => security.latestScan ? new Date(security.latestScan.scannedAt).toLocaleDateString() : 'No scan')
 
 const stats = computed(() => [
   { label: 'Projects', value: projects.projects.length, icon: FolderOpen, tone: 'text-indigo-300' },
-  { label: 'AI Tools', value: new Set(projects.projects.flatMap(p => p.aiTools?.length ? p.aiTools : [p.aiTool])).size, icon: Zap, tone: 'text-emerald-300' },
-  { label: 'Guides', value: 4, icon: BookOpen, tone: 'text-sky-300' },
+  { label: 'Open Findings', value: security.openFindings, icon: AlertTriangle, tone: 'text-red-300' },
+  { label: 'Saved Scans', value: security.scans.length, icon: Zap, tone: 'text-emerald-300' },
 ])
 
 const guides = [
-  { title: 'Plan a sprint with AI', detail: 'Start from a goal, clarify scope, then finalize tickets.', icon: Sparkles },
-  { title: 'Keep one active project', detail: 'Use the sidebar selector to scope tools and workflows.', icon: FolderOpen },
+  { title: 'Run a security scan', detail: 'Select a project, choose effort, and let Codex inspect concrete risks.', icon: ShieldCheck },
+  { title: 'Keep one active project', detail: 'Use the sidebar selector to scope scans, reports, and findings.', icon: FolderOpen },
   { title: 'Run Doctor first', detail: 'Check npm, Codex, and local app health before automation.', icon: Wrench },
-  { title: 'Review before shipping', detail: 'Use boards, histories, and security checks to keep work visible.', icon: ShieldCheck },
+  { title: 'Track remediation', detail: 'Convert scan results into security findings and move them to closure.', icon: Sparkles },
 ]
 
-const news = [
-  { tag: 'New', title: 'Service Controller preview is available', detail: 'Postgres, Redis, RabbitMQ, and local stack controls now have a dedicated tool page.' },
-  { tag: 'Update', title: 'Security Analyzer workspace added', detail: 'A project-aware analyzer shell is ready for future dependency, secret, and service-port scans.' },
-  { tag: 'Guide', title: 'Active project selector moved to the sidebar', detail: 'Tools now follow the selected project, even outside the project workspace.' },
-]
+
+async function loadActiveSecurity() {
+  if (!activeProject.value?.absolutePath) return
+  await security.load(activeProject.value.absolutePath, activeProject.value.id).catch(() => {})
+}
+
+watch(() => activeProject.value?.id, () => {
+  void loadActiveSecurity()
+})
 
 async function handleFinish() {
-  if (!wizard.selectedPath || !wizard.projectName || !wizard.selectedEditor) return
+  if (!wizard.selectedPath || !wizard.projectName) return
 
   const data = await createProject(wizard.selectedPath, {
     name: wizard.projectName,
     description: wizard.projectDescription,
     absolutePath: wizard.selectedPath,
     githubRepo: null,
-    editor: wizard.selectedEditor,
+    editor: 'other',
     aiTool: wizard.selectedAITools[0] ?? 'codex',
     aiTools: wizard.selectedAITools,
     activeAITool: null,
@@ -84,7 +89,7 @@ async function handleFinish() {
               <h1 class="text-3xl font-bold tracking-tight text-[var(--text)]">Welcome back to Vindicta</h1>
             </div>
             <p class="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--text-muted)]">
-              Plan focused sprints, keep AI work scoped to the selected project, and turn local tooling into a calmer command center.
+              Scan local projects for vulnerabilities, keep findings scoped to the selected codebase, and turn security review into a calmer command center.
             </p>
           </div>
 
@@ -94,10 +99,10 @@ async function handleFinish() {
               Add Project
             </GlassButton>
             <NuxtLink
-              :to="activeProject ? `/projects/${activeProject.id}` : '/services'"
+              :to="activeProject ? `/projects/${activeProject.id}` : '/'"
               class="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-5 py-2.5 text-sm font-medium text-[var(--text-muted)] transition-colors hover:bg-white/[0.07] hover:text-[var(--text)]"
             >
-              {{ activeProject ? 'Open Workspace' : 'Explore Tools' }}
+              {{ activeProject ? 'Open Workspace' : 'Select Project' }}
               <ArrowRight class="size-3.5" />
             </NuxtLink>
           </div>
@@ -120,8 +125,8 @@ async function handleFinish() {
               <p class="mt-1 text-sm font-semibold text-[var(--text)]">{{ activeProject?.code ?? '-' }}</p>
             </div>
             <div class="rounded-lg border border-[var(--border)] bg-white/[0.03] px-3 py-2">
-              <p class="text-[10px] uppercase tracking-wider text-[var(--text-faint)]">AI Tools</p>
-              <p class="mt-1 text-sm font-semibold text-[var(--text)]">{{ toolCount }}</p>
+              <p class="text-[10px] uppercase tracking-wider text-[var(--text-faint)]">Last Scan</p>
+              <p class="mt-1 truncate text-sm font-semibold text-[var(--text)]">{{ latestScanLabel }}</p>
             </div>
           </div>
         </div>
@@ -165,43 +170,19 @@ async function handleFinish() {
           </div>
         </section>
 
-        <section class="rounded-xl border border-[var(--border)] bg-[var(--bg-card)]">
-          <div class="flex items-center justify-between border-b border-[var(--border)] p-4">
-            <div>
-              <h2 class="text-sm font-semibold text-[var(--text)]">News & Updates</h2>
-              <p class="mt-0.5 text-xs text-[var(--text-muted)]">What changed around your local workspace.</p>
-            </div>
-            <Newspaper class="size-4 text-violet-300" />
-          </div>
-          <div class="divide-y divide-[var(--border)]">
-            <article
-              v-for="item in news"
-              :key="item.title"
-              class="flex gap-3 p-4"
-            >
-              <span class="mt-0.5 shrink-0 rounded-full border border-indigo-500/20 bg-indigo-500/10 px-2 py-0.5 text-[10px] font-medium text-indigo-300">
-                {{ item.tag }}
-              </span>
-              <div>
-                <h3 class="text-sm font-semibold text-[var(--text)]">{{ item.title }}</h3>
-                <p class="mt-1 text-xs leading-relaxed text-[var(--text-muted)]">{{ item.detail }}</p>
-              </div>
-            </article>
-          </div>
-        </section>
       </main>
 
       <aside class="space-y-6">
         <section class="rounded-xl border border-amber-500/20 bg-amber-500/[0.06] p-4">
           <div class="flex items-center gap-2">
-            <Award class="size-4 text-amber-300" />
-            <h2 class="text-sm font-semibold text-[var(--text)]">Get Vindicta Certified</h2>
+            <ShieldCheck class="size-4 text-amber-300" />
+            <h2 class="text-sm font-semibold text-[var(--text)]">Security Routine</h2>
           </div>
           <p class="mt-3 text-xs leading-relaxed text-[var(--text-muted)]">
-            A future learning track for project setup, sprint planning, AI handoff, security review, and local service operations.
+            Keep a quick scan fresh, review new evidence, and export a report before release decisions.
           </p>
           <button class="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs font-medium text-amber-200 transition-colors hover:bg-amber-500/15">
-            View Track
+            View Workspace
             <ArrowRight class="size-3.5" />
           </button>
         </section>
@@ -213,17 +194,10 @@ async function handleFinish() {
           </div>
           <div class="mt-4 space-y-2">
             <NuxtLink
-              to="/services"
+              :to="activeProject ? `/projects/${activeProject.id}?tab=scanner` : '/'"
               class="flex items-center justify-between rounded-lg border border-[var(--border)] bg-black/10 px-3 py-2 text-xs text-[var(--text-muted)] transition-colors hover:bg-white/[0.05] hover:text-[var(--text)]"
             >
-              Service Controller
-              <ArrowRight class="size-3.5" />
-            </NuxtLink>
-            <NuxtLink
-              to="/security"
-              class="flex items-center justify-between rounded-lg border border-[var(--border)] bg-black/10 px-3 py-2 text-xs text-[var(--text-muted)] transition-colors hover:bg-white/[0.05] hover:text-[var(--text)]"
-            >
-              Security Analyzer
+              Run Scanner
               <ArrowRight class="size-3.5" />
             </NuxtLink>
             <button
@@ -244,11 +218,11 @@ async function handleFinish() {
           <div class="mt-4 space-y-3">
             <div class="flex items-start gap-2">
               <CheckCircle2 class="mt-0.5 size-3.5 shrink-0 text-emerald-300" />
-              <p class="text-xs leading-relaxed text-[var(--text-muted)]">Pick an active project before opening tools.</p>
+              <p class="text-xs leading-relaxed text-[var(--text-muted)]">Pick an active project before running scans.</p>
             </div>
             <div class="flex items-start gap-2">
               <CheckCircle2 class="mt-0.5 size-3.5 shrink-0 text-emerald-300" />
-              <p class="text-xs leading-relaxed text-[var(--text-muted)]">Use the project Info tab to review README context.</p>
+              <p class="text-xs leading-relaxed text-[var(--text-muted)]">Open findings with full evidence before creating remediation items.</p>
             </div>
           </div>
         </section>

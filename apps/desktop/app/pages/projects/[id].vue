@@ -1,18 +1,30 @@
 <script setup lang="ts">
-import { Activity, Bot, Clock3, FolderOpen, Info, KanbanSquare, ListTodo, PanelBottomOpen, Settings, Sparkles, Users } from 'lucide-vue-next'
+import { AlertTriangle, Clock3, FileText, KeyRound, PackageSearch, PanelBottomOpen, Radar, Settings, ShieldCheck } from 'lucide-vue-next'
 import type { Component } from 'vue'
 
+type SecurityWorkspaceTab = 'overview' | 'scanner' | 'findings' | 'dependencies' | 'secrets' | 'reports' | 'history' | 'settings'
+
 const route = useRoute()
+const router = useRouter()
 const projectsStore = useProjectsStore()
-const kanban = useKanbanStore()
-const sprint = useSprintStore()
 const aiActivity = useAIActivityStore()
 
-const activeTab = ref<string>('info')
-const showAIToolPicker = ref(false)
+const activeTab = ref<SecurityWorkspaceTab>('overview')
 const headerCollapsed = ref(false)
+const showPentestModal = ref(false)
 const projectId = computed(() => route.params.id as string)
 const project = computed(() => projectsStore.projects.find((p) => p.id === projectId.value))
+
+const tabs: { id: SecurityWorkspaceTab; label: string; icon: Component }[] = [
+  { id: 'overview', label: 'Overview', icon: ShieldCheck },
+  { id: 'scanner', label: 'Scanner', icon: Radar },
+  { id: 'findings', label: 'Findings', icon: AlertTriangle },
+  { id: 'dependencies', label: 'Dependencies', icon: PackageSearch },
+  { id: 'secrets', label: 'Secrets', icon: KeyRound },
+  { id: 'reports', label: 'Reports', icon: FileText },
+  { id: 'history', label: 'History', icon: Clock3 },
+  { id: 'settings', label: 'Settings', icon: Settings },
+]
 
 onMounted(async () => {
   await aiActivity.load()
@@ -21,73 +33,24 @@ onMounted(async () => {
   }
   if (project.value) {
     projectsStore.setActive(project.value.id)
-    const { read } = useVindictaJson()
-    try {
-      const data = await read(project.value.absolutePath)
-      kanban.load(data.tickets, project.value.absolutePath)
-      sprint.load(data.sprints, project.value.absolutePath)
-    }
-    catch {
-      kanban.load([], '')
-      sprint.load([], '')
-    }
-    if (!project.value.activeAITool) {
-      showAIToolPicker.value = true
+    // Show pentest opt-in modal once per project if never prompted
+    if (!project.value.pentestEnabled && !project.value.pentestPromptDismissed) {
+      setTimeout(() => { showPentestModal.value = true }, 800)
     }
   }
 })
 
-async function selectCodexForProject() {
-  if (!project.value) return
-  const aiTools = project.value.aiTools?.includes('codex')
-    ? project.value.aiTools
-    : [...(project.value.aiTools ?? []), 'codex' as const]
-  const { patchMeta } = useVindictaJson()
-  await patchMeta(project.value.absolutePath, {
-    aiTools,
-    activeAITool: 'codex',
-  })
-  await projectsStore.updateProjectMeta(project.value.id, {
-    aiTools,
-    activeAITool: 'codex',
-  })
-  showAIToolPicker.value = false
+function isSecurityTab(value: unknown): value is SecurityWorkspaceTab {
+  return tabs.some(tab => tab.id === value)
 }
 
-function openSprintBoard() {
-  activeTab.value = 'kanban'
+function changeTab(tab: SecurityWorkspaceTab) {
+  activeTab.value = tab
+  void router.replace({ query: { ...route.query, tab } })
 }
-
-const allTabs: { id: string; label: string; icon: Component; sprintOnly?: boolean }[] = [
-  { id: 'ai-workspace', label: 'AI Workspace', icon: Bot, sprintOnly: true },
-  { id: 'info',     label: 'Info', icon: Info },
-  { id: 'kanban',   label: 'Board', icon: KanbanSquare },
-  { id: 'tickets',  label: 'Tickets', icon: ListTodo },
-  { id: 'sprint',   label: 'Sprints', icon: Sparkles },
-  { id: 'files',    label: 'Files', icon: FolderOpen },
-  { id: 'health',   label: 'Health Score', icon: Activity },
-  { id: 'members',  label: 'Members', icon: Users },
-  { id: 'history',  label: 'History', icon: Clock3 },
-  { id: 'settings', label: 'Settings', icon: Settings },
-]
-
-const tabs = computed(() =>
-  allTabs.filter((t) => {
-    if (t.id === 'ai-workspace') return true
-    return !t.sprintOnly || sprint.activeSprint !== null
-  }),
-)
 
 watch(() => route.query.tab, (tab) => {
-  if (tab === 'ai-workspace') {
-    activeTab.value = 'ai-workspace'
-  }
-}, { immediate: true })
-
-// Fall back to Info whenever the Board tab isn't in the visible tab set
-watch(tabs, (visibleTabs) => {
-  const ids = visibleTabs.map(t => t.id)
-  if (!ids.includes(activeTab.value)) activeTab.value = 'info'
+  activeTab.value = isSecurityTab(tab) ? tab : 'overview'
 }, { immediate: true })
 </script>
 
@@ -125,23 +88,18 @@ watch(tabs, (visibleTabs) => {
             leave-from-class="translate-y-0 opacity-100"
             leave-to-class="-translate-y-3 opacity-0"
           >
-            <ProjectHeader v-if="!headerCollapsed" :project="project" @sprint-board="openSprintBoard" />
+            <ProjectHeader v-if="!headerCollapsed" :project="project" />
           </Transition>
 
-          <!-- Tab bar -->
           <div class="flex items-center gap-0.5 overflow-x-auto scrollbar-none" :class="headerCollapsed ? 'mt-0' : 'mt-4'">
             <button
               v-for="tab in tabs"
               :key="tab.id"
               class="px-3 py-2 text-xs font-medium transition-colors relative whitespace-nowrap flex items-center gap-1 cursor-pointer"
               :class="activeTab === tab.id
-                ? tab.id === 'ai-workspace'
-                  ? 'text-amber-200 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-px after:bg-amber-300'
-                  : 'text-[var(--text)] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-px after:bg-indigo-500'
-                : tab.id === 'ai-workspace'
-                  ? 'text-amber-300/75 hover:text-amber-200'
-                  : 'text-[var(--text-faint)] hover:text-[var(--text-muted)]'"
-              @click="activeTab = tab.id"
+                ? 'text-[var(--text)] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-px after:bg-indigo-500'
+                : 'text-[var(--text-faint)] hover:text-[var(--text-muted)]'"
+              @click="changeTab(tab.id)"
             >
               <component :is="tab.icon" class="size-3" />
               {{ tab.label }}
@@ -158,50 +116,23 @@ watch(tabs, (visibleTabs) => {
       </div>
 
       <div class="flex-1 overflow-auto">
-        <KanbanBoard v-if="activeTab === 'kanban'" sprint-filter />
-        <TicketsTable v-else-if="activeTab === 'tickets'" />
-        <VibeSprint v-else-if="activeTab === 'sprint'" @ai-handover-started="activeTab = 'ai-workspace'" />
-        <AIWorkspacePanel v-else-if="activeTab === 'ai-workspace'" :project-id="project.id" />
-        <ProjectInfo v-else-if="activeTab === 'info'" :project-path="project.absolutePath" />
-        <ProjectFiles v-else-if="activeTab === 'files'" :project-path="project.absolutePath" />
-        <ProjectHealthScore v-else-if="activeTab === 'health'" :project-path="project.absolutePath" />
-        <ProjectMembers v-else-if="activeTab === 'members'" :project-path="project.absolutePath" />
-        <ProjectHistory v-else-if="activeTab === 'history'" :project-path="project.absolutePath" />
-        <ProjectSettings v-else-if="activeTab === 'settings'" :project-path="project.absolutePath" />
+        <SecurityWorkspace :project="project" :tab="activeTab" @change-tab="changeTab" />
       </div>
-
-      <!-- Ticket detail side panel (globally mounted) -->
-      <TicketDetail />
-
-      <GlassModal v-model="showAIToolPicker" title="Choose AI Tool" max-width="sm" :closeable="false">
-        <div class="space-y-4">
-          <p class="text-sm text-[var(--text-muted)]">
-            Choose the AI tool Vindicta should use for this project workspace.
-          </p>
-          <button
-            class="w-full flex items-center gap-3 rounded-xl border border-indigo-500/30 bg-indigo-500/10 px-4 py-3 text-left hover:bg-indigo-500/15 transition-colors"
-            @click="selectCodexForProject"
-          >
-            <div class="size-9 rounded-lg bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-200 font-semibold">
-              C
-            </div>
-            <div>
-              <p class="text-sm font-semibold text-indigo-100">Codex</p>
-              <p class="text-xs text-indigo-200/60 mt-0.5">Use Codex for planning, editing, and checking this project.</p>
-            </div>
-          </button>
-          <div class="flex justify-end">
-            <GlassButton size="sm" @click="selectCodexForProject">Use Codex</GlassButton>
-          </div>
-        </div>
-      </GlassModal>
     </template>
 
     <div v-else class="flex items-center justify-center py-24">
       <div class="text-center">
         <p class="text-[var(--text-muted)] text-sm">Project not found.</p>
-        <NuxtLink to="/" class="text-xs text-indigo-400 hover:text-indigo-300 mt-2 block">← Back to Home</NuxtLink>
+        <NuxtLink to="/" class="text-xs text-indigo-400 hover:text-indigo-300 mt-2 block">Back to Home</NuxtLink>
       </div>
     </div>
   </div>
+
+  <!-- Pentest opt-in modal (shown once on first project open) -->
+  <PentestEnableModal
+    v-if="project"
+    v-model="showPentestModal"
+    :project-name="project.name"
+    :project-path="project.absolutePath"
+  />
 </template>

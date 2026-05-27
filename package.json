@@ -2,8 +2,8 @@
   "name": "vindicta-workspace",
   "private": true,
   "scripts": {
-    "app:dev": "pnpm --filter @vindicta/desktop tauri:dev",
-    "desktop:dev": "pnpm --filter @vindicta/desktop dev",
+    "desktop:dev": "pnpm --filter @vindicta/desktop tauri:dev",
+    "desktop:build": "pnpm --filter @vindicta/desktop tauri:build",
     "api:dev": "pnpm --filter @vindicta/api dev",
     "landing:dev": "pnpm --filter @vindicta/landing dev"
   }

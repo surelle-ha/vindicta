@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/surelle-ha/vindicta/main/schema/v8.json",
+  "title": "Vindicta Security Project",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "$schema",
+    "version",
+    "meta",
+    "settings",
+    "members",
+    "tickets",
+    "sprints",
+    "history",
+    "security"
+  ],
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "const": 8 },
+    "meta": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["id", "name", "absolutePath", "editor", "aiTool", "aiTools", "activeAITool", "ownedBy", "code", "ticketCounter", "createdAt", "updatedAt"]
+    },
+    "settings": { "type": "object", "additionalProperties": true },
+    "members": { "type": "array" },
+    "tickets": { "type": "array" },
+    "sprints": { "type": "array" },
+    "history": { "type": "array" },
+    "security": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["findingCounter", "findings", "scans", "settings"],
+      "properties": {
+        "findingCounter": { "type": "integer", "minimum": 0 },
+        "findings": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/securityFinding" }
+        },
+        "scans": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/securityScan" }
+        },
+        "settings": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": ["autoScanEnabled", "autoScanStaleHours", "autoScanEffort"],
+          "properties": {
+            "autoScanEnabled": { "type": "boolean" },
+            "autoScanStaleHours": { "type": "integer", "minimum": 1 },
+            "autoScanEffort": { "enum": ["low", "medium", "high"] },
+            "aiFindingLimit": { "type": "integer", "minimum": 0, "maximum": 50 }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "securitySeverity": { "enum": ["critical", "high", "medium", "low"] },
+    "securityFindingStatus": { "enum": ["open", "triaged", "in_progress", "resolved", "ignored"] },
+    "securityFindingSource": { "enum": ["ai_review", "dependency", "secret", "config"] },
+    "securityFinding": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["id", "number", "title", "severity", "status", "category", "source", "area", "detail", "evidence", "recommendation", "createdAt", "updatedAt", "resolvedAt", "scanId"],
+      "properties": {
+        "id": { "type": "string" },
+        "number": { "type": "integer", "minimum": 1 },
+        "title": { "type": "string" },
+        "severity": { "$ref": "#/$defs/securitySeverity" },
+        "status": { "$ref": "#/$defs/securityFindingStatus" },
+        "category": { "type": "string" },
+        "source": { "$ref": "#/$defs/securityFindingSource" },
+        "area": { "type": "string" },
+        "detail": { "type": "string" },
+        "evidence": { "type": "string" },
+        "recommendation": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "resolvedAt": { "type": ["string", "null"], "format": "date-time" },
+        "scanId": { "type": ["string", "null"] }
+      }
+    },
+    "securityScanFinding": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["id", "title", "severity", "category", "source", "area", "detail", "evidence", "recommendation", "selected"]
+    },
+    "securityScan": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["id", "projectId", "projectName", "projectCode", "projectPath", "scannedAt", "source", "effort", "status", "summary", "rawReport", "findings", "parseWarning"],
+      "properties": {
+        "id": { "type": "string" },
+        "projectId": { "type": "string" },
+        "projectName": { "type": "string" },
+        "projectCode": { "type": "string" },
+        "projectPath": { "type": "string" },
+        "scannedAt": { "type": "string", "format": "date-time" },
+        "source": { "$ref": "#/$defs/securityFindingSource" },
+        "effort": { "enum": ["low", "medium", "high"] },
+        "status": { "enum": ["done", "warning", "error"] },
+        "summary": { "type": "string" },
+        "rawReport": { "type": "string" },
+        "findings": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/securityScanFinding" }
+        },
+        "parseWarning": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

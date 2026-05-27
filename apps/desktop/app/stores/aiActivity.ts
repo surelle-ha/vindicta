@@ -26,7 +26,7 @@ export interface AIHandoverFinding {
   detail: string
   evidence: string
   recommendation: string
-  status: 'open' | 'backlogged' | 'dismissed'
+  status: 'open' | 'backlogged' | 'sprinted' | 'dismissed'
   selected: boolean
 }
 
@@ -316,7 +316,7 @@ function normalizeJobs(value: unknown): AIActivityJob[] {
             detail: String(finding?.detail ?? ''),
             evidence: String(finding?.evidence ?? ''),
             recommendation: String(finding?.recommendation ?? ''),
-            status: ['open', 'backlogged', 'dismissed'].includes(finding?.status) ? finding.status : 'open',
+            status: ['open', 'backlogged', 'sprinted', 'dismissed'].includes(finding?.status) ? finding.status : 'open',
             selected: Boolean(finding?.selected ?? finding?.status !== 'backlogged'),
           }))
         : [],

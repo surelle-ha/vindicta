@@ -20,7 +20,7 @@ defineEmits<{
 
     <h2 class="text-xl font-bold text-white mb-2">No projects yet</h2>
     <p class="text-sm text-white/50 max-w-xs mb-8 leading-relaxed">
-      Add your first project to start tracking tickets, sprints, and shipping vibes.
+      Add your first project to start scanning vulnerabilities, tracking findings, and exporting security reports.
     </p>
 
     <GlassButton size="lg" @click="$emit('addProject')">

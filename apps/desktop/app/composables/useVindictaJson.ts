@@ -1,12 +1,12 @@
-import type { VindictaJson, ProjectMeta, ProjectSettings, Ticket, Sprint, HistoryEntry, Member } from '~/types/vindicta'
-import { VINDICTA_SCHEMA_VERSION, DEFAULT_KANBAN_COLUMNS, DEFAULT_ROLES } from '~/types/vindicta'
+import type { VindictaJson, ProjectMeta, ProjectSettings, Ticket, Sprint, HistoryEntry, Member, SecurityData } from '~/types/vindicta'
+import { VINDICTA_SCHEMA_VERSION, DEFAULT_KANBAN_COLUMNS, DEFAULT_ROLES, DEFAULT_SECURITY_DATA } from '~/types/vindicta'
 import { deriveProjectCode } from '~/utils/ticket'
 import { migrateVindictaJson } from '~/utils/migration'
 import { generateId } from '~/utils/id'
 import { nowISO } from '~/utils/date'
 
 const FILENAME = 'vindicta.json'
-const SCHEMA_URL = 'https://raw.githubusercontent.com/surelle-ha/vindicta/main/schema/v7.json'
+const SCHEMA_URL = 'https://raw.githubusercontent.com/surelle-ha/vindicta/main/schema/v8.json'
 
 export function useVindictaJson() {
   const fs = useTauriFs()
@@ -52,6 +52,7 @@ export function useVindictaJson() {
       ],
       tickets: [],
       sprints: [],
+      security: structuredClone(DEFAULT_SECURITY_DATA),
       history: [{
         id: generateId(),
         at: now,
@@ -109,6 +110,13 @@ export function useVindictaJson() {
     await write(projectPath, data)
   }
 
+  async function patchSecurity(projectPath: string, security: SecurityData): Promise<void> {
+    const data = await read(projectPath)
+    data.security = security
+    data.meta.updatedAt = nowISO()
+    await write(projectPath, data)
+  }
+
   async function resetProjectData(projectPath: string): Promise<void> {
     const data = await read(projectPath)
     data.tickets = []
@@ -129,5 +137,5 @@ export function useVindictaJson() {
     return fs.exists(vindictaPath(projectPath))
   }
 
-  return { read, write, createProject, patchTickets, patchSprints, patchSettings, patchMembers, patchMeta, appendHistory, fileExists, resetProjectData }
+  return { read, write, createProject, patchTickets, patchSprints, patchSettings, patchMembers, patchMeta, patchSecurity, appendHistory, fileExists, resetProjectData }
 }

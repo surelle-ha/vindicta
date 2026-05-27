@@ -45,7 +45,8 @@ async function openJob(jobId: string) {
   if (!job) return
   aiActivity.setActive(jobId)
   if (job.kind === 'security-scan') {
-    await router.push('/security')
+    if (job.projectId) await router.push({ path: `/projects/${job.projectId}`, query: { tab: 'scanner' } })
+    else await router.push('/security')
     return
   }
   if (job.projectId) {

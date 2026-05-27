@@ -18,5 +18,6 @@ onMounted(() => {
     </div>
     <NotificationToast />
     <FloatingAIActivity />
+    <FeaturesModal />
   </div>
 </template>

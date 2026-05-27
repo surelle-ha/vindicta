@@ -75,7 +75,7 @@ const workspaceTabs = computed(() => [
   { id: 'tickets' as const, label: 'Ticket Steps', icon: Bot, count: selectedSprintTickets.value.length },
   { id: 'activity' as const, label: 'Activity', icon: Loader2, count: activityEvents.value.length },
   { id: 'code' as const, label: 'Code', icon: FileCode, count: visibleChangedFiles.value.length },
-  { id: 'suggestions' as const, label: 'Backlog Suggestions', icon: Lightbulb, count: selectedJob.value?.findings.length ?? 0 },
+  { id: 'suggestions' as const, label: 'Suggestions', icon: Lightbulb, count: selectedJob.value?.findings.length ?? 0 },
   { id: 'report' as const, label: 'Report', icon: FileDiff, count: selectedJob.value?.output ? 1 : 0 },
 ])
 const canResumeSelectedJob = computed(() =>
@@ -420,10 +420,40 @@ async function sendSelectedFindingsToBacklog() {
       }, 'AI Agent')
       aiActivity.updateFinding(job.id, finding.id, { status: 'backlogged', selected: false })
     }
-    notify(`Sent ${selectedFindings.value.length} handover finding${selectedFindings.value.length === 1 ? '' : 's'} to backlog.`, 'success')
+    notify(`Sent ${selectedFindings.value.length} suggestion${selectedFindings.value.length === 1 ? '' : 's'} to backlog.`, 'success')
   }
   catch (e: any) {
-    notify(e?.message ?? 'Could not send findings to backlog.', 'error')
+    notify(e?.message ?? 'Could not send suggestions to backlog.', 'error')
+  }
+}
+
+async function sendSelectedFindingsToSprint() {
+  const job = selectedJob.value
+  if (!job || !job.sprintId || !selectedFindings.value.length) return
+  const selectedSprint = sprint.sprints.find(item => item.id === job.sprintId)
+  if (!selectedSprint) {
+    notify('Could not find the sprint for these suggestions.', 'warning')
+    return
+  }
+
+  try {
+    for (const finding of selectedFindings.value) {
+      const ticket = await kanban.createTicket({
+        title: `[AI Handover] ${finding.title}`,
+        type: normalizeTicketType(finding.type),
+        priority: normalizeTicketPriority(finding.priority),
+        status: selectedSprint.status === 'active' ? 'todo' : 'backlog',
+        sprintId: selectedSprint.id,
+        description: findingDescription(finding),
+        labels: ['ai-handover', 'follow-up', 'sprint'],
+      }, 'AI Agent')
+      await sprint.assignTicket(ticket.id, selectedSprint.id)
+      aiActivity.updateFinding(job.id, finding.id, { status: 'sprinted', selected: false })
+    }
+    notify(`Sent ${selectedFindings.value.length} suggestion${selectedFindings.value.length === 1 ? '' : 's'} to ${selectedSprint.name}.`, 'success')
+  }
+  catch (e: any) {
+    notify(e?.message ?? 'Could not send suggestions to the sprint.', 'error')
   }
 }
 
@@ -793,17 +823,26 @@ async function resumeSelectedHandover() {
           <div>
             <div class="flex items-center gap-2">
               <Lightbulb class="size-3.5 text-amber-300" />
-              <h2 class="text-sm font-semibold text-[var(--text)]">Backlog Suggestions</h2>
+              <h2 class="text-sm font-semibold text-[var(--text)]">Suggestions</h2>
             </div>
             <p class="mt-1 text-xs text-[var(--text-muted)]">Out-of-scope issues, tech debt, and follow-ups noticed during handover.</p>
           </div>
-          <button
-            class="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-medium text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
-            :disabled="!selectedFindings.length"
-            @click="sendSelectedFindingsToBacklog"
-          >
-            Send selected to backlog
-          </button>
+          <div class="flex flex-wrap gap-2">
+            <button
+              class="rounded-lg border border-[var(--border)] bg-black/10 px-3 py-2 text-xs font-medium text-[var(--text-muted)] transition-colors hover:bg-white/[0.05] hover:text-[var(--text)] disabled:cursor-not-allowed disabled:opacity-50"
+              :disabled="!selectedFindings.length"
+              @click="sendSelectedFindingsToBacklog"
+            >
+              Send to backlog
+            </button>
+            <button
+              class="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-medium text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+              :disabled="!selectedFindings.length || !selectedJob.sprintId"
+              @click="sendSelectedFindingsToSprint"
+            >
+              Send to current sprint
+            </button>
+          </div>
         </div>
         <div v-if="selectedJob.findings.length" class="mt-3 space-y-2">
           <div v-for="finding in selectedJob.findings" :key="finding.id" class="rounded-lg border border-[var(--border)] bg-black/10 px-3 py-2">
@@ -829,7 +868,7 @@ async function resumeSelectedHandover() {
         </div>
         <div v-else class="mt-3 rounded-lg border border-dashed border-[var(--border)] bg-black/10 px-3 py-8 text-center">
           <Lightbulb class="mx-auto size-5 text-[var(--text-faint)]" />
-          <p class="mt-2 text-xs text-[var(--text-muted)]">No backlog suggestions were returned for this handover.</p>
+          <p class="mt-2 text-xs text-[var(--text-muted)]">No suggestions were returned for this handover.</p>
         </div>
       </section>
 

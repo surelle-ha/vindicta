@@ -5,7 +5,7 @@ export const useWizardStore = defineStore('wizard', {
   state: () => ({
     open: false,
     currentStep: 0,
-    totalSteps: 3,
+    totalSteps: 2,
     selectedPath: null as string | null,
     projectName: '',
     projectDescription: '',
@@ -21,7 +21,6 @@ export const useWizardStore = defineStore('wizard', {
   getters: {
     canProceed: (s) => {
       if (s.currentStep === 0) return !!s.selectedPath && !!s.projectName.trim()
-      if (s.currentStep === 1) return !!s.selectedEditor
       return s.selectedAITools.length > 0
     },
     isFirstStep: (s) => s.currentStep === 0,

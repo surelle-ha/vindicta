@@ -18,4 +18,5 @@ Thumbs.db
 
 # Others
 TODO.md
+docs/todo/*.md
 .vindicta_codex_*.txt

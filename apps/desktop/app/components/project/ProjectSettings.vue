@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { GripVertical, Plus, Trash2, Eye, EyeOff, Copy, Check, AlertTriangle } from 'lucide-vue-next'
+import { AlertTriangle, Check, Copy, ExternalLink, Eye, EyeOff, GripVertical, Plus, ShieldOff, Swords, Trash2 } from 'lucide-vue-next'
 import type { AIToolSlug, KanbanColumn, Role } from '~/types/vindicta'
 import { DEFAULT_KANBAN_COLUMNS, DEFAULT_ROLES } from '~/types/vindicta'
 import { generateId } from '~/utils/id'
@@ -13,9 +13,10 @@ const projects = useProjectsStore()
 const router = useRouter()
 const { notify } = useNotifications()
 
-const activeTab = ref<'general' | 'board' | 'roles' | 'danger'>('general')
+const activeTab = ref<'general' | 'board' | 'roles' | 'pentest' | 'danger'>('general')
 const visibleTabs = [
   { id: 'general', label: 'General' },
+  { id: 'pentest', label: 'Pentest' },
   { id: 'danger', label: 'Danger Zone' },
 ]
 
@@ -137,6 +138,68 @@ async function saveRoles() {
   }
   finally {
     boardSaving.value = false
+  }
+}
+
+// Pentest settings
+const showPentestModal = ref(false)         // full opt-in modal (when not yet enabled)
+const showChangePentestUrlModal = ref(false) // URL-change modal (when already enabled)
+const pentestUrlDraft = ref('')
+const pentestSaving = ref(false)
+const pentestDisabling = ref(false)
+
+const pentestEnabled = computed(() => project.value?.pentestEnabled ?? false)
+const pentestTargetUrl = computed(() => project.value?.pentestTargetUrl ?? '')
+
+const pentestUrlValid = computed(() => {
+  try {
+    const u = new URL(pentestUrlDraft.value.trim())
+    return u.protocol === 'http:' || u.protocol === 'https:'
+  }
+  catch { return false }
+})
+
+watch(showChangePentestUrlModal, (open) => {
+  if (open) pentestUrlDraft.value = pentestTargetUrl.value
+})
+
+async function savePentestUrl() {
+  if (!project.value || !pentestUrlValid.value) return
+  pentestSaving.value = true
+  try {
+    const partial = { pentestTargetUrl: pentestUrlDraft.value.trim() }
+    await patchMeta(props.projectPath, partial)
+    await projects.updateProjectMeta(project.value.id, partial)
+    notify('Pentest target URL updated.', 'success')
+    showChangePentestUrlModal.value = false
+  }
+  catch (e: any) {
+    notify(e?.message ?? 'Failed to update pentest URL.', 'error')
+  }
+  finally {
+    pentestSaving.value = false
+  }
+}
+
+async function disablePentest() {
+  if (!project.value) return
+  pentestDisabling.value = true
+  try {
+    const partial = {
+      pentestEnabled: false,
+      pentestPromptDismissed: true,
+      pentestTermsAccepted: false,
+      pentestEnabledAt: null,
+    }
+    await patchMeta(props.projectPath, partial)
+    await projects.updateProjectMeta(project.value.id, partial)
+    notify('Pentest feature disabled for this project.', 'success')
+  }
+  catch (e: any) {
+    notify(e?.message ?? 'Failed to disable pentest.', 'error')
+  }
+  finally {
+    pentestDisabling.value = false
   }
 }
 
@@ -351,6 +414,101 @@ async function deleteFiles() {
       </div>
     </div>
 
+    <!-- Pentest tab -->
+    <div v-if="activeTab === 'pentest'" class="space-y-5">
+      <!-- Status banner -->
+      <div
+        class="flex items-start gap-3 rounded-xl border p-4"
+        :class="pentestEnabled
+          ? 'border-violet-500/25 bg-violet-500/[0.06]'
+          : 'border-[var(--border)] bg-white/[0.02]'"
+      >
+        <div
+          class="grid size-9 shrink-0 place-items-center rounded-lg border"
+          :class="pentestEnabled ? 'border-violet-500/30 bg-violet-500/15' : 'border-white/[0.08] bg-white/[0.04]'"
+        >
+          <Swords
+            class="size-4"
+            :class="pentestEnabled ? 'text-violet-300' : 'text-white/30'"
+          />
+        </div>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2">
+            <p class="text-sm font-semibold text-[var(--text)]">Penetration Testing</p>
+            <span
+              class="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded"
+              :class="pentestEnabled
+                ? 'bg-violet-500/15 text-violet-300'
+                : 'bg-white/[0.06] text-white/30'"
+            >
+              {{ pentestEnabled ? 'Enabled' : 'Disabled' }}
+            </span>
+          </div>
+          <p v-if="pentestEnabled && pentestTargetUrl" class="mt-1 text-xs text-[var(--text-muted)] truncate">
+            Target: <span class="text-violet-300 font-mono">{{ pentestTargetUrl }}</span>
+          </p>
+          <p v-else-if="!pentestEnabled" class="mt-1 text-xs text-[var(--text-faint)]">
+            Enable to access Red/Blue/Purple team tools for this project.
+          </p>
+        </div>
+      </div>
+
+      <!-- Enable via modal (if not enabled) -->
+      <div v-if="!pentestEnabled" class="rounded-lg border border-[var(--border)] bg-white/[0.02] p-4 flex items-center justify-between gap-4">
+        <div>
+          <p class="text-sm text-[var(--text-muted)]">Enable pentest feature for <span class="text-[var(--text)] font-medium">{{ project?.name }}</span></p>
+          <p class="text-xs text-[var(--text-faint)] mt-0.5">You'll need to provide your deployed instance URL and accept the responsible use terms.</p>
+        </div>
+        <button
+          class="shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-violet-600 hover:bg-violet-500 text-white transition-colors"
+          @click="showPentestModal = true"
+        >
+          <Swords class="size-3.5" />
+          Enable
+        </button>
+      </div>
+
+      <!-- Settings when enabled -->
+      <template v-if="pentestEnabled">
+        <!-- Target URL -->
+        <div class="space-y-2">
+          <label class="block text-xs font-semibold uppercase tracking-wider text-[var(--text-faint)]">Target Instance URL</label>
+          <div class="flex items-center gap-2">
+            <div class="flex-1 flex items-center gap-2 rounded-lg border border-[var(--border)] bg-white/[0.03] px-3 py-2">
+              <ExternalLink class="size-3.5 text-violet-400 shrink-0" />
+              <span class="text-sm text-[var(--text)] font-mono truncate">{{ pentestTargetUrl || '—' }}</span>
+            </div>
+            <button
+              class="shrink-0 px-3 py-2 text-xs rounded-lg border border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-white/[0.05] transition-colors"
+              @click="showChangePentestUrlModal = true"
+            >
+              Change URL
+            </button>
+          </div>
+          <p class="text-[11px] text-[var(--text-faint)]">All active scans will target this URL. Only update if your deployed instance changed.</p>
+        </div>
+
+        <!-- Disable -->
+        <div class="rounded-xl border border-amber-500/20 bg-amber-500/[0.04] p-4 flex items-start gap-3">
+          <AlertTriangle class="size-4 text-amber-400 mt-0.5 shrink-0" />
+          <div class="flex-1">
+            <p class="text-sm font-medium text-[var(--text)]">Disable pentest feature</p>
+            <p class="text-xs text-[var(--text-muted)] mt-0.5 mb-3">
+              This removes the Pentest item from the sidebar for this project. Your scan history is preserved.
+            </p>
+            <button
+              class="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border border-amber-500/30 bg-amber-600/10 text-amber-300 hover:bg-amber-600/20 transition-colors disabled:opacity-50"
+              :disabled="pentestDisabling"
+              @click="disablePentest"
+            >
+              <ShieldOff class="size-3.5" />
+              {{ pentestDisabling ? 'Disabling…' : 'Disable Pentest' }}
+            </button>
+          </div>
+        </div>
+      </template>
+    </div>
+
     <!-- Danger Zone tab -->
     <div v-if="activeTab === 'danger'" class="space-y-4">
       <div class="rounded-xl border border-red-500/25 bg-red-500/5 p-5 space-y-4">
@@ -391,6 +549,49 @@ async function deleteFiles() {
       </div>
     </div>
   </div>
+
+  <!-- Pentest: full opt-in modal (shown when not yet enabled) -->
+  <PentestEnableModal
+    v-if="project"
+    v-model="showPentestModal"
+    :project-name="project.name"
+    :project-path="props.projectPath"
+    @enabled="showPentestModal = false"
+    @dismissed="showPentestModal = false"
+  />
+
+  <!-- Pentest: change target URL modal (shown when already enabled) -->
+  <GlassModal v-model="showChangePentestUrlModal" title="Update Pentest Target URL" max-width="sm">
+    <div class="space-y-4">
+      <p class="text-sm text-[var(--text-muted)]">Update the target URL for pentest scans. Make sure this is still an instance you own and have permission to test.</p>
+      <div class="space-y-2">
+        <label class="block text-xs font-semibold uppercase tracking-wider text-[var(--text-faint)]">New Target URL</label>
+        <input
+          v-model="pentestUrlDraft"
+          type="url"
+          placeholder="https://staging.myapp.com"
+          class="w-full rounded-lg border bg-white/[0.04] px-3 py-2.5 text-sm text-[var(--text)] placeholder-[var(--text-faint)] outline-none transition-colors"
+          :class="pentestUrlDraft && !pentestUrlValid
+            ? 'border-red-500/40 focus:border-red-500/60'
+            : pentestUrlValid
+              ? 'border-emerald-500/40 focus:border-emerald-500/60'
+              : 'border-[var(--border)] focus:border-indigo-500/50'"
+        >
+        <p v-if="pentestUrlDraft && !pentestUrlValid" class="text-[11px] text-red-400">Enter a valid http:// or https:// URL.</p>
+      </div>
+      <div class="flex justify-end gap-2 pt-1">
+        <button class="px-4 py-2 text-sm rounded-lg border border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text)] transition-colors" @click="showChangePentestUrlModal = false">Cancel</button>
+        <button
+          class="px-4 py-2 text-sm font-medium rounded-lg transition-colors"
+          :class="pentestUrlValid ? 'bg-violet-600 hover:bg-violet-500 text-white' : 'bg-white/[0.04] text-[var(--text-faint)] cursor-not-allowed'"
+          :disabled="!pentestUrlValid || pentestSaving"
+          @click="savePentestUrl"
+        >
+          {{ pentestSaving ? 'Saving…' : 'Update URL' }}
+        </button>
+      </div>
+    </div>
+  </GlassModal>
 
   <!-- Reset data modal -->
   <GlassModal v-model="showResetModal" title="Reset project data" max-width="sm">

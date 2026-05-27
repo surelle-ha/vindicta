@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Sun, Moon, Database, ChevronDown, ChevronUp, Stethoscope, CheckCircle2, AlertTriangle, XCircle, Wrench, Loader2, Terminal, Download, Github, Heart } from 'lucide-vue-next'
+import { Sun, Moon, Database, ChevronDown, ChevronUp, Stethoscope, CheckCircle2, AlertTriangle, XCircle, Wrench, Loader2, Terminal, Download, Github, Heart, Send, Bug, Lightbulb, Sparkles, Eye, Plug } from 'lucide-vue-next'
 
 const app = useAppStore()
 const user = useUserStore()
@@ -10,6 +10,139 @@ const { notify } = useNotifications()
 // Notifications
 const notifs = ref(app.notificationsEnabled)
 watch(notifs, (v) => app.setNotifications(v))
+
+// MCP in sidebar
+const mcpInSidebar = ref(app.mcpInSidebar)
+watch(mcpInSidebar, (v) => app.setMcpInSidebar(v))
+
+// Vigilante
+const vigilanteWarningOpen = ref(false)
+
+function onVigilanteToggle(e: Event) {
+  const checked = (e.target as HTMLInputElement).checked
+  if (checked) {
+    // Opening — show confirmation modal first; don't enable yet
+    vigilanteWarningOpen.value = true
+    // Prevent the checkbox from visually changing until confirmed
+    ;(e.target as HTMLInputElement).checked = false
+  }
+  else {
+    void app.setVigilante(false)
+  }
+}
+
+function confirmVigilante() {
+  void app.setVigilante(true)
+  vigilanteWarningOpen.value = false
+}
+
+function cancelVigilante() {
+  vigilanteWarningOpen.value = false
+}
+
+// Contact
+const contactType = ref<'bug' | 'suggestion' | 'feature'>('bug')
+const contactTitle = ref('')
+const contactBody = ref('')
+const contactEmail = ref('')
+const contactRepo = ref(app.contact.githubRepo)
+const contactToken = ref(app.contact.githubToken)
+const contactSubmitting = ref(false)
+const showContactConfig = ref(false)
+
+const contactTypes = [
+  { id: 'bug' as const, label: 'Bug', icon: Bug, labelName: 'type:bug' },
+  { id: 'suggestion' as const, label: 'Suggestion', icon: Lightbulb, labelName: 'type:suggestion' },
+  { id: 'feature' as const, label: 'Feature', icon: Sparkles, labelName: 'type:feature' },
+]
+
+const selectedContactType = computed(() =>
+  contactTypes.find(type => type.id === contactType.value) ?? contactTypes[0]!,
+)
+
+const canSubmitContact = computed(() =>
+  Boolean(contactTitle.value.trim() && contactBody.value.trim() && contactRepo.value.trim()),
+)
+
+function issueBody() {
+  return [
+    contactBody.value.trim(),
+    '',
+    '---',
+    `Submitted from Vindicta desktop settings.`,
+    contactEmail.value.trim() ? `Contact: ${contactEmail.value.trim()}` : '',
+  ].filter(Boolean).join('\n')
+}
+
+function issueUrl() {
+  const repo = contactRepo.value.trim() || 'Surelle-ha/vindicta'
+  const query = new URLSearchParams({
+    title: `[${selectedContactType.value.label}] ${contactTitle.value.trim() || 'Vindicta feedback'}`,
+    body: issueBody(),
+    labels: selectedContactType.value.labelName,
+  })
+  return `https://github.com/${repo}/issues/new?${query.toString()}`
+}
+
+async function saveContactSettings() {
+  await app.setContact({
+    githubRepo: contactRepo.value.trim() || 'Surelle-ha/vindicta',
+    githubToken: contactToken.value.trim(),
+  })
+  notify('Contact settings saved.', 'success')
+}
+
+async function openIssueInBrowser() {
+  const { open } = await import('@tauri-apps/plugin-shell')
+  await open(issueUrl())
+}
+
+async function submitGitHubIssue() {
+  if (!canSubmitContact.value) {
+    notify('Add a title, details, and GitHub repo before submitting.', 'warning')
+    return
+  }
+  const repo = contactRepo.value.trim()
+  const token = contactToken.value.trim()
+  if (!token) {
+    notify('Add a GitHub token or open the prefilled issue in your browser.', 'warning')
+    return
+  }
+
+  contactSubmitting.value = true
+  try {
+    await saveContactSettings()
+    const response = await fetch(`https://api.github.com/repos/${repo}/issues`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/vnd.github+json',
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+      body: JSON.stringify({
+        title: `[${selectedContactType.value.label}] ${contactTitle.value.trim()}`,
+        body: issueBody(),
+        labels: [selectedContactType.value.labelName, 'vindicta-feedback'],
+      }),
+    })
+
+    if (!response.ok) {
+      const detail = await response.text().catch(() => '')
+      throw new Error(detail || `GitHub returned HTTP ${response.status}`)
+    }
+
+    contactTitle.value = ''
+    contactBody.value = ''
+    notify('GitHub issue submitted.', 'success')
+  }
+  catch (e: any) {
+    notify(e?.message ?? 'Could not submit GitHub issue.', 'error')
+  }
+  finally {
+    contactSubmitting.value = false
+  }
+}
 
 // Doctor
 type DoctorStatus = 'ok' | 'warning' | 'error'
@@ -30,7 +163,7 @@ const codexInstallLog = ref('')
 const doctorSummary = computed(() => {
   const errors = doctorChecks.value.filter(c => c.status === 'error').length
   const warnings = doctorChecks.value.filter(c => c.status === 'warning').length
-  if (!doctorChecks.value.length) return 'Run checks to inspect local app state.'
+  if (!doctorChecks.value.length) return 'Run checks to inspect local security tooling.'
   if (errors) return `${errors} error${errors !== 1 ? 's' : ''} found`
   if (warnings) return `${warnings} warning${warnings !== 1 ? 's' : ''} found`
   return 'Everything looks healthy.'
@@ -192,7 +325,7 @@ async function runDoctor() {
     checks.push({
       id: 'profile',
       label: 'Profile',
-      detail: user.name ? `Signed in as ${user.name}` : 'Profile name is missing. Complete onboarding to personalize activity.',
+      detail: user.name ? `Signed in as ${user.name}` : 'Profile name is missing. Complete onboarding to personalize security activity.',
       status: user.name ? 'ok' : 'warning',
       fixable: false,
     })
@@ -233,6 +366,10 @@ const rawData = computed(() => JSON.stringify({
   appSettings: {
     theme: app.theme,
     notificationsEnabled: app.notificationsEnabled,
+    contact: {
+      githubRepo: app.contact.githubRepo,
+      githubToken: app.contact.githubToken ? 'saved locally' : '',
+    },
   },
 }, null, 2))
 
@@ -296,8 +433,99 @@ async function resetAll() {
             {{ app.theme === 'dark' ? 'Light' : 'Dark' }}
           </GlassButton>
         </div>
+
+        <div class="h-px bg-[var(--border)]" />
+
+        <!-- MCP in Sidebar -->
+        <div class="flex items-center justify-between">
+          <div class="flex items-start gap-3">
+            <div class="mt-0.5 grid size-7 shrink-0 place-items-center rounded-lg border border-indigo-500/20 bg-indigo-500/10">
+              <Plug class="size-3.5 text-indigo-300" />
+            </div>
+            <div>
+              <p class="text-sm text-[var(--text)]">Show MCP in Sidebar</p>
+              <p class="text-xs text-[var(--text-muted)] mt-0.5">Display the MCP server item in the navigation sidebar</p>
+            </div>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer shrink-0 ml-4">
+            <input v-model="mcpInSidebar" type="checkbox" class="sr-only peer">
+            <div class="w-9 h-5 bg-white/10 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white/40 after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600 peer-checked:after:bg-white" />
+          </label>
+        </div>
+
+        <div class="h-px bg-[var(--border)]" />
+
+        <!-- Enable Vigilante -->
+        <div class="flex items-center justify-between">
+          <div class="flex items-start gap-3">
+            <div
+              class="mt-0.5 grid size-7 shrink-0 place-items-center rounded-lg border transition-colors"
+              :class="app.vigilanteEnabled
+                ? 'border-orange-500/30 bg-orange-500/10'
+                : 'border-[var(--border)] bg-white/[0.04]'"
+            >
+              <Eye class="size-3.5" :class="app.vigilanteEnabled ? 'text-orange-300' : 'text-[var(--text-faint)]'" />
+            </div>
+            <div>
+              <div class="flex items-center gap-2">
+                <p class="text-sm text-[var(--text)]">Enable Vigilante</p>
+                <span v-if="app.vigilanteEnabled" class="rounded-full bg-orange-500/10 border border-orange-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-orange-400">Active</span>
+                <span v-else class="rounded-full bg-white/[0.05] border border-[var(--border)] px-1.5 py-0.5 text-[10px] text-[var(--text-faint)]">Experimental</span>
+              </div>
+              <p class="text-xs text-[var(--text-muted)] mt-0.5">Active threat hunting and continuous monitoring mode</p>
+            </div>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer shrink-0 ml-4">
+            <input
+              type="checkbox"
+              class="sr-only peer"
+              :checked="app.vigilanteEnabled"
+              @change="onVigilanteToggle"
+            >
+            <div class="w-9 h-5 bg-white/10 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white/40 after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-orange-600 peer-checked:after:bg-white" />
+          </label>
+        </div>
       </div>
     </div>
+
+    <!-- Vigilante confirmation modal -->
+    <GlassModal v-model="vigilanteWarningOpen" title="Enable Vigilante Mode?" @close="cancelVigilante">
+      <div class="space-y-4">
+        <div class="flex items-start gap-3 rounded-xl border border-orange-500/25 bg-orange-500/[0.08] p-4">
+          <AlertTriangle class="size-5 text-orange-400 shrink-0 mt-0.5" />
+          <div class="space-y-1.5">
+            <p class="text-sm font-semibold text-orange-300">Experimental Feature</p>
+            <p class="text-xs leading-relaxed text-[var(--text-muted)]">
+              Vigilante mode is an advanced active threat-hunting feature currently under development.
+              Enabling it today adds the toggle state to your configuration — no active system behavior is attached yet.
+            </p>
+          </div>
+        </div>
+
+        <div class="space-y-2">
+          <p class="text-xs font-semibold text-[var(--text)]">Before enabling, acknowledge the following:</p>
+          <ul class="space-y-1.5">
+            <li v-for="clause in [
+              'This feature is experimental and subject to change without notice.',
+              'Future versions may perform active network and filesystem monitoring.',
+              'You are responsible for ensuring monitoring complies with applicable laws and policies.',
+              'You can disable Vigilante at any time from Settings → General.',
+            ]" :key="clause" class="flex items-start gap-2 text-xs text-[var(--text-muted)]">
+              <Eye class="size-3.5 text-orange-400/60 shrink-0 mt-0.5" />
+              {{ clause }}
+            </li>
+          </ul>
+        </div>
+
+        <div class="flex gap-2 justify-end pt-1">
+          <GlassButton variant="ghost" size="sm" @click="cancelVigilante">Cancel</GlassButton>
+          <GlassButton size="sm" class="bg-orange-600/20 text-orange-300 border-orange-500/30 hover:bg-orange-600/30" @click="confirmVigilante">
+            <Eye class="size-3.5" />
+            Enable Vigilante
+          </GlassButton>
+        </div>
+      </div>
+    </GlassModal>
 
     <!-- Notifications -->
     <div class="space-y-3">
@@ -306,7 +534,7 @@ async function resetAll() {
         <div class="flex items-center justify-between">
           <div>
             <p class="text-sm text-[var(--text)]">In-app notifications</p>
-            <p class="text-xs text-[var(--text-muted)] mt-0.5">Toast alerts for tickets, sprints, and project events</p>
+            <p class="text-xs text-[var(--text-muted)] mt-0.5">Toast alerts for scans, findings, exports, and app events</p>
           </div>
           <label class="relative inline-flex items-center cursor-pointer">
             <input v-model="notifs" type="checkbox" class="sr-only peer">
@@ -328,7 +556,7 @@ async function resetAll() {
           <div class="min-w-0">
             <p class="text-sm font-semibold text-[var(--text)]">Made by Harold Eustaquio</p>
             <p class="mt-1 text-xs leading-relaxed text-[var(--text-muted)]">
-              Vindicta is a local-first workspace for planning projects, shaping sprints, and keeping AI-assisted work grounded in the files you actually ship.
+              Vindicta is a local-first security workspace for scanning projects, tracking remediation, and keeping AI-assisted review grounded in the files you actually ship.
             </p>
           </div>
         </div>
@@ -341,6 +569,77 @@ async function resetAll() {
           <Github class="size-3.5" />
           github.com/Surelle-ha
         </a>
+      </div>
+    </div>
+
+    <!-- Contact -->
+    <div class="space-y-3">
+      <h3 class="text-[10px] font-semibold text-[var(--text-faint)] uppercase tracking-[0.12em]">Contact</h3>
+      <div class="p-4 rounded-xl bg-[var(--bg-card)] border border-[var(--border)] space-y-4">
+        <div>
+          <p class="text-sm font-semibold text-[var(--text)]">Submit feedback</p>
+          <p class="mt-1 text-xs leading-relaxed text-[var(--text-muted)]">
+            Send bugs, suggestions, and feature requests to GitHub Issues. Tokens stored in a desktop app are local convenience secrets, not backend-protected secrets.
+          </p>
+        </div>
+
+        <div class="grid grid-cols-3 gap-2">
+          <button
+            v-for="type in contactTypes"
+            :key="type.id"
+            class="inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-colors"
+            :class="contactType === type.id
+              ? 'border-indigo-500/40 bg-indigo-500/15 text-indigo-100'
+              : 'border-[var(--border)] bg-black/10 text-[var(--text-muted)] hover:bg-white/[0.05] hover:text-[var(--text)]'"
+            @click="contactType = type.id"
+          >
+            <component :is="type.icon" class="size-3.5" />
+            {{ type.label }}
+          </button>
+        </div>
+
+        <GlassInput v-model="contactTitle" label="Title" placeholder="Short issue title" />
+        <div class="flex flex-col gap-1.5">
+          <label class="text-xs font-medium text-white/60 uppercase tracking-wider">Details</label>
+          <textarea
+            v-model="contactBody"
+            rows="5"
+            placeholder="What happened, what did you expect, or what should Vindicta support?"
+            class="w-full resize-none rounded-lg border border-white/[0.08] bg-white/[0.04] px-4 py-2.5 text-sm text-white outline-none transition-colors placeholder:text-white/30 focus:border-indigo-500/60 focus:bg-white/10"
+          />
+        </div>
+        <GlassInput v-model="contactEmail" label="Contact email optional" placeholder="you@example.com" />
+
+        <button
+          class="flex w-full cursor-pointer items-center gap-2 rounded-lg border border-[var(--border)] bg-black/10 px-3 py-2 text-left text-xs text-[var(--text-muted)] transition-colors hover:bg-white/[0.05] hover:text-[var(--text)]"
+          @click="showContactConfig = !showContactConfig"
+        >
+          <Github class="size-3.5" />
+          GitHub issue settings
+          <ChevronDown v-if="!showContactConfig" class="ml-auto size-3.5" />
+          <ChevronUp v-else class="ml-auto size-3.5" />
+        </button>
+
+        <div v-if="showContactConfig" class="space-y-3 rounded-lg border border-[var(--border)] bg-black/10 p-3">
+          <GlassInput v-model="contactRepo" label="Repository" placeholder="owner/repo" />
+          <GlassInput v-model="contactToken" label="Fine-grained token" type="password" placeholder="GitHub token with Issues: Read and write" />
+          <p class="text-[11px] leading-relaxed text-[var(--text-faint)]">
+            Use a fine-grained GitHub token scoped to one repository with Issues read/write only. Do not use a broad personal token.
+          </p>
+          <GlassButton variant="ghost" size="sm" @click="saveContactSettings">Save issue settings</GlassButton>
+        </div>
+
+        <div class="flex flex-wrap gap-2">
+          <GlassButton :disabled="!canSubmitContact || contactSubmitting" @click="submitGitHubIssue">
+            <Loader2 v-if="contactSubmitting" class="size-3.5 animate-spin" />
+            <Send v-else class="size-3.5" />
+            Submit to GitHub
+          </GlassButton>
+          <GlassButton variant="ghost" :disabled="!canSubmitContact" @click="openIssueInBrowser">
+            <Github class="size-3.5" />
+            Open prefilled issue
+          </GlassButton>
+        </div>
       </div>
     </div>
 

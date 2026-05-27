@@ -1,10 +1,15 @@
-export const VINDICTA_SCHEMA_VERSION = 7
+export const VINDICTA_SCHEMA_VERSION = 8
 
 export type TicketStatus = 'backlog' | 'todo' | 'in_progress' | 'in_review' | 'done' | 'cancelled'
 export type TicketType = 'feature' | 'bug' | 'fix' | 'chore' | 'spike'
 export type TicketPriority = 'low' | 'medium' | 'high' | 'critical'
 export type EditorSlug = 'vscode' | 'cursor' | 'zed' | 'neovim' | 'webstorm' | 'other'
 export type AIToolSlug = 'codex' | 'claude_code' | 'copilot' | 'codeium' | 'other'
+export type SecuritySeverity = 'critical' | 'high' | 'medium' | 'low'
+export type SecurityFindingStatus = 'open' | 'triaged' | 'in_progress' | 'resolved' | 'ignored'
+export type SecurityFindingSource = 'ai_review' | 'dependency' | 'secret' | 'config'
+export type SecurityScanEffort = 'low' | 'medium' | 'high'
+export type SecurityScanStatus = 'done' | 'warning' | 'error'
 
 export interface Role {
   id: string
@@ -91,6 +96,67 @@ export interface Sprint {
   createdAt: string
 }
 
+export interface SecurityFinding {
+  id: string
+  number: number
+  title: string
+  severity: SecuritySeverity
+  status: SecurityFindingStatus
+  category: string
+  source: SecurityFindingSource
+  area: string
+  detail: string
+  evidence: string
+  recommendation: string
+  createdAt: string
+  updatedAt: string
+  resolvedAt: string | null
+  scanId: string | null
+}
+
+export interface SecurityScanFinding {
+  id: string
+  title: string
+  severity: SecuritySeverity
+  category: string
+  source: SecurityFindingSource
+  area: string
+  detail: string
+  evidence: string
+  recommendation: string
+  selected: boolean
+}
+
+export interface SecurityScan {
+  id: string
+  projectId: string
+  projectName: string
+  projectCode: string
+  projectPath: string
+  scannedAt: string
+  source: SecurityFindingSource
+  effort: SecurityScanEffort
+  status: SecurityScanStatus
+  summary: string
+  rawReport: string
+  findings: SecurityScanFinding[]
+  parseWarning: string | null
+}
+
+export interface SecuritySettings {
+  autoScanEnabled: boolean
+  autoScanStaleHours: number
+  autoScanEffort: SecurityScanEffort
+  aiFindingLimit: number
+}
+
+export interface SecurityData {
+  findingCounter: number
+  findings: SecurityFinding[]
+  scans: SecurityScan[]
+  settings: SecuritySettings
+}
+
 export interface ProjectMeta {
   id: string
   name: string
@@ -106,6 +172,12 @@ export interface ProjectMeta {
   createdAt: string
   updatedAt: string
   ownedBy: string
+  // Pentest feature flags (optional; undefined = never configured)
+  pentestEnabled?: boolean
+  pentestPromptDismissed?: boolean
+  pentestTargetUrl?: string
+  pentestTermsAccepted?: boolean
+  pentestEnabledAt?: string | null
 }
 
 export const DEFAULT_KANBAN_COLUMNS: KanbanColumn[] = [
@@ -131,4 +203,19 @@ export interface VindictaJson {
   tickets: Ticket[]
   sprints: Sprint[]
   history: HistoryEntry[]
+  security: SecurityData
+}
+
+export const DEFAULT_SECURITY_SETTINGS: SecuritySettings = {
+  autoScanEnabled: true,
+  autoScanStaleHours: 24,
+  autoScanEffort: 'low',
+  aiFindingLimit: 10,
+}
+
+export const DEFAULT_SECURITY_DATA: SecurityData = {
+  findingCounter: 0,
+  findings: [],
+  scans: [],
+  settings: DEFAULT_SECURITY_SETTINGS,
 }

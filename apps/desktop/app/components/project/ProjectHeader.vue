@@ -1,16 +1,11 @@
 <script setup lang="ts">
-import { GitBranch, Cpu, Code2, Zap, RefreshCw } from 'lucide-vue-next'
+import { GitBranch, Cpu, Code2, RefreshCw, ShieldCheck } from 'lucide-vue-next'
 import type { AIToolSlug, ProjectMeta } from '~/types/vindicta'
 
 const props = defineProps<{
   project: ProjectMeta
 }>()
 
-const emit = defineEmits<{
-  sprintBoard: []
-}>()
-
-const sprint = useSprintStore()
 const projectRef = computed(() => props.project)
 const {
   currentMessage,
@@ -87,17 +82,10 @@ const activeToolLabel = computed(() => toolLabel(props.project.activeAITool ?? n
       </div>
     </div>
     <div class="flex items-center gap-2 shrink-0">
-      <!-- Active sprint indicator -->
-      <button
-        v-if="sprint.activeSprint"
-        class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/25 text-xs font-medium text-indigo-300 hover:bg-indigo-500/20 transition-colors"
-        @click="emit('sprintBoard')"
-      >
-        <Zap class="size-3.5 text-indigo-400" />
-        <span>{{ sprint.activeSprint.name }}</span>
-        <span class="text-indigo-400/50 ml-0.5">→ Board</span>
-      </button>
-
+      <GlassBadge variant="default">
+        <ShieldCheck class="size-3" />
+        Security Workspace
+      </GlassBadge>
       <GlassBadge variant="purple">
         <Code2 class="size-3" />
         {{ project.editor }}

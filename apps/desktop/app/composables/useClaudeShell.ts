@@ -18,7 +18,7 @@ interface ClaudeRunOptions {
 export async function runClaude(opts: ClaudeRunOptions): Promise<void> {
   const { prompt, projectPath, onLine, onClose, onError } = opts
   const cmdName = 'claude-run'
-  const cmdArgs = ['--output-format', 'stream-json', '--print', prompt]
+  const cmdArgs = ['--output-format', 'stream-json', '--verbose', '--print', prompt]
 
   let stdoutBuf = ''
   let allStdout = ''

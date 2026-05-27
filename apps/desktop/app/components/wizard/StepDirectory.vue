@@ -188,13 +188,6 @@ watch(() => wizard.importMode, () => {
     <div class="flex rounded-xl border border-white/10 overflow-hidden text-xs font-medium">
       <button
         class="flex-1 py-2.5 transition-colors"
-        :class="wizard.importMode === 'new' ? 'bg-indigo-600 text-white' : 'text-white/40 hover:text-white/70'"
-        @click="wizard.importMode = 'new'"
-      >
-        Create New
-      </button>
-      <button
-        class="flex-1 py-2.5 transition-colors"
         :class="wizard.importMode === 'local' ? 'bg-indigo-600 text-white' : 'text-white/40 hover:text-white/70'"
         @click="wizard.importMode = 'local'"
       >
@@ -233,7 +226,7 @@ watch(() => wizard.importMode, () => {
           />
           <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-white/30">3 chars</span>
         </div>
-        <p class="text-xs text-white/30 mt-1">Auto-derived from project name. Used as ticket prefix (e.g. VND-1).</p>
+        <p class="text-xs text-white/30 mt-1">Auto-derived from project name. Used in scan reports and finding labels.</p>
       </div>
 
       <GlassInput v-model="wizard.projectDescription" label="Description (optional)" placeholder="What are you building?" />
@@ -314,7 +307,7 @@ watch(() => wizard.importMode, () => {
           />
           <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-white/30">3 chars</span>
         </div>
-        <p class="text-xs text-white/30 mt-1">Auto-derived from project name. Used as ticket prefix (e.g. VND-1).</p>
+        <p class="text-xs text-white/30 mt-1">Auto-derived from project name. Used in scan reports and finding labels.</p>
       </div>
 
       <GlassInput v-model="wizard.projectDescription" label="Description (optional)" placeholder="What are you building?" />

@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { CheckCircle2, CircleDashed, FolderKanban, Stethoscope, UserCircle2, Zap } from 'lucide-vue-next'
-import vindictaBanner from '~/assets/images/vindicta-banner.png'
+import { CheckCircle2, CircleDashed, ShieldCheck, Stethoscope, UserCircle2, Zap } from 'lucide-vue-next'
 
 const app = useAppStore()
 const user = useUserStore()
@@ -9,9 +8,9 @@ const emit = defineEmits<{ launched: [] }>()
 
 const animating = ref(false)
 const launchMessages = [
-  'Read the project. Shape the sprint. Move the work.',
-  'Turn README context into tickets your AI can actually pick up.',
-  'Start focused, keep the board honest, ship with momentum.',
+  'Read the project. Map the risks. Close the findings.',
+  'Turn source context into vulnerability scans your team can act on.',
+  'Start focused, keep evidence visible, ship with confidence.',
 ]
 
 const systemChecks = computed(() => [
@@ -31,7 +30,7 @@ const systemChecks = computed(() => [
     label: 'Projects',
     detail: projects.hasProjects ? `${projects.projects.length} registered` : 'No registry entries yet',
     ok: projects.hasProjects,
-    icon: FolderKanban,
+    icon: ShieldCheck,
   },
 ])
 
@@ -85,13 +84,13 @@ function onKey(e: KeyboardEvent) {
             <div class="flex flex-col items-center gap-4">
               <div class="text-center">
                 <img
-                  :src="vindictaBanner"
+                  src="/icon.png"
                   alt="Vindicta"
-                  class="mx-auto h-auto w-[min(19rem,72vw)] select-none object-contain drop-shadow-2xl"
+                  class="mx-auto size-24 select-none rounded-2xl object-cover drop-shadow-2xl"
                   draggable="false"
                 >
-                <div class="-mt-12 sm:-mt-14">
-                  <p class="text-sm text-white/30 tracking-wide">Your vibe coding companion</p>
+                <div class="mt-5">
+                  <p class="text-sm text-white/30 tracking-wide">Your local security companion</p>
                   <TextType :text="launchMessages" class-name="mt-3 min-h-5 text-sm font-medium text-indigo-100/55"
                     :typing-speed="42" :deleting-speed="22" :pause-duration="1800" :show-cursor="true" cursor-character="|"
                     cursor-class-name="text-indigo-200/50" />
