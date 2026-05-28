@@ -116,6 +116,70 @@
   /* h-4.5 / w-4.5 utility (not in Tailwind defaults) */
   .h-4_5 { height: 1.125rem; }
   .w-4_5 { width:  1.125rem; }
+
+  .prose-policy section h2 {
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: rgba(255,255,255,0.85);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+
+  .prose-policy p {
+    font-size: 0.875rem;
+    line-height: 1.8;
+    color: rgba(255,255,255,0.50);
+    margin-bottom: 0.75rem;
+  }
+
+  .prose-policy strong {
+    color: rgba(255,255,255,0.75);
+    font-weight: 600;
+  }
+
+  .prose-policy a {
+    color: #8b5cf6;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .prose-policy a:hover { color: #a78bfa; }
+
+  .prose-policy ul {
+    list-style: none;
+    padding: 0;
+    margin: 0.5rem 0 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
+  .prose-policy ul li {
+    font-size: 0.875rem;
+    line-height: 1.7;
+    color: rgba(255,255,255,0.50);
+    padding-left: 1rem;
+    position: relative;
+  }
+
+  .prose-policy ul li::before {
+    content: '-';
+    position: absolute;
+    left: 0;
+    color: rgba(139,92,246,0.5);
+  }
+
+  .prose-policy code {
+    background: rgba(255,255,255,0.06);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-family: ui-monospace, monospace;
+    font-size: 0.78rem;
+    color: rgba(255,255,255,0.7);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

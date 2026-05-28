@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { Activity, Award, BookOpenCheck, GraduationCap, LogIn, MapPin, RotateCcw, UserCircle2 } from 'lucide-vue-next'
+import { Activity, BookOpenCheck, Github, GraduationCap, LogIn, LogOut, MapPin, RotateCcw, UserCircle2 } from 'lucide-vue-next'
 import { LESSONS, TOTAL_DAYS } from '~/data/curriculum'
+import { useAuthStore } from '~/stores/auth'
 
 const user = useUserStore()
 const academy = useAcademyStore()
+const auth = useAuthStore()
 const router = useRouter()
 
 const name = ref(user.name)
@@ -45,19 +47,9 @@ const academyStatus = computed(() => {
   if (completedLessons.value > 0) return 'In progress'
   return 'Ready to begin'
 })
-const badgeTitle = computed(() => {
-  if (academy.allCompleted) return 'Security Engineering Graduate'
-  if (completedLessons.value >= 15) return 'Pentest Practitioner'
-  if (completedLessons.value >= 5) return 'Security Foundations'
-  return 'Security Initiate'
-})
-const badgeSubtitle = computed(() => {
-  if (academy.allCompleted) return 'Badge composition ready for export.'
-  return 'Badge will evolve as Academy milestones are completed.'
-})
-
-onMounted(() => {
+onMounted(async () => {
   void academy.loadFromDisk()
+  await auth.load()
 })
 </script>
 
@@ -95,17 +87,36 @@ onMounted(() => {
               <GlassBadge variant="info">{{ tokenUsage.runs }} AI run{{ tokenUsage.runs !== 1 ? 's' : '' }}</GlassBadge>
             </div>
           </div>
-          <GlassButton size="sm" class="self-start sm:self-end" @click="router.push('/login')">
+        </div>
+
+        <!-- GitHub connected -->
+        <div v-if="auth.isGitHubConnected" class="mt-5 flex items-center justify-between gap-3 rounded-lg border border-emerald-500/20 bg-emerald-500/[0.06] px-3 py-2.5">
+          <div class="flex items-center gap-2.5">
+            <Github class="size-4 text-emerald-300 shrink-0" />
+            <div>
+              <p class="text-xs font-semibold text-emerald-200">GitHub connected</p>
+              <p class="text-[11px] text-[var(--text-muted)]">Signed in as @{{ auth.githubUser?.login }}</p>
+            </div>
+          </div>
+          <button
+            class="flex items-center gap-1 rounded-lg border border-[var(--border)] px-2.5 py-1 text-[11px] text-[var(--text-faint)] transition-colors hover:border-red-500/25 hover:bg-red-500/[0.06] hover:text-red-300"
+            @click="auth.logoutGitHub()"
+          >
+            <LogOut class="size-3" />
+            Disconnect
+          </button>
+        </div>
+
+        <!-- GitHub not connected -->
+        <div v-else class="mt-5 flex items-center justify-between gap-3 rounded-lg border border-[var(--border)] bg-white/[0.02] px-3 py-2.5">
+          <div class="flex items-center gap-2.5">
+            <Github class="size-4 text-[var(--text-faint)] shrink-0" />
+            <p class="text-xs text-[var(--text-muted)]">Connect GitHub to import repos and create issues.</p>
+          </div>
+          <GlassButton size="sm" @click="router.push('/login')">
             <LogIn class="size-3.5" />
             Sign In
           </GlassButton>
-        </div>
-
-        <div class="mt-5 flex items-start gap-3 rounded-lg border border-indigo-500/20 bg-indigo-500/[0.06] p-3">
-          <UserCircle2 class="size-4 text-indigo-300 mt-0.5 shrink-0" />
-          <p class="text-xs leading-relaxed text-[var(--text-muted)]">
-            GitHub and Google login are being prepared. For now, Vindicta keeps this profile and AI activity history locally on this device.
-          </p>
         </div>
       </div>
     </section>
@@ -211,32 +222,6 @@ onMounted(() => {
           </GlassButton>
         </div>
 
-        <div class="rounded-xl border border-amber-500/20 bg-amber-500/[0.04] p-4">
-          <div class="flex items-start gap-4">
-            <div class="grid size-16 shrink-0 place-items-center rounded-xl border border-amber-400/25 bg-gradient-to-br from-amber-500/25 via-violet-500/15 to-emerald-500/20">
-              <Award class="size-8 text-amber-200" />
-            </div>
-            <div class="min-w-0 flex-1">
-              <p class="text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-300">Badge Composer</p>
-              <h2 class="mt-1 text-lg font-bold text-[var(--text)]">{{ badgeTitle }}</h2>
-              <p class="mt-1 text-xs leading-relaxed text-[var(--text-muted)]">{{ badgeSubtitle }}</p>
-              <div class="mt-3 grid gap-2 sm:grid-cols-3">
-                <div class="rounded-lg border border-white/10 bg-black/10 px-3 py-2">
-                  <p class="text-[10px] text-[var(--text-faint)]">Academy</p>
-                  <p class="text-sm font-semibold text-[var(--text)]">{{ academyProgress }}%</p>
-                </div>
-                <div class="rounded-lg border border-white/10 bg-black/10 px-3 py-2">
-                  <p class="text-[10px] text-[var(--text-faint)]">Milestone</p>
-                  <p class="truncate text-sm font-semibold text-[var(--text)]">{{ badgeTitle }}</p>
-                </div>
-                <div class="rounded-lg border border-white/10 bg-black/10 px-3 py-2">
-                  <p class="text-[10px] text-[var(--text-faint)]">Status</p>
-                  <p class="text-sm font-semibold text-amber-200">Prepared</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
       </main>
     </div>
   </div>

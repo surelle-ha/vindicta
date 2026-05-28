@@ -1,7 +1,8 @@
 <script setup lang="ts">
-useHead({
-  title: 'Vindicta — Local-First Security Workspace',
-  htmlAttrs: { style: 'scroll-padding-top: 72px' },
+useLandingSeo({
+  title: 'Vindicta - Local-First Security Workspace',
+  description: 'Download Vindicta, a free local-first desktop security workspace for AI code review, vulnerability tracking, dependency inventory, secret checks, and security lessons.',
+  path: '/',
 })
 
 // ── GitHub release ─────────────────────────────────────────────────────────────
@@ -205,32 +206,7 @@ const badgeClass: Record<string, string> = {
 </script>
 
 <template>
-  <div class="flex flex-col min-h-screen overflow-x-hidden">
-
-    <!-- ── Nav ──────────────────────────────────────────────────────────────── -->
-    <nav class="nav-glass fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-8 py-4 w-full">
-      <div class="flex items-center gap-3">
-        <img src="/icon.png" alt="Vindicta" class="h-7 w-7" />
-        <span class="text-[15px] font-bold tracking-widest uppercase select-none">Vindicta</span>
-        <span class="hidden sm:inline rounded-full bg-accent/15 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-accent">Security</span>
-      </div>
-      <div class="flex items-center gap-6 text-[13px] text-white/50">
-        <a href="#features" class="hidden sm:inline hover:text-white transition-colors">Features</a>
-        <a href="#scans"    class="hidden sm:inline hover:text-white transition-colors">Scans</a>
-        <a href="#academy"  class="hidden sm:inline hover:text-white transition-colors">Academy</a>
-        <a href="#download" class="hidden sm:inline hover:text-white transition-colors">Download</a>
-        <a href="https://github.com/surelle-ha/vindicta" target="_blank" rel="noopener"
-          class="hover:text-white transition-colors">GitHub</a>
-        <a :href="downloadUrl" target="_blank" rel="noopener"
-          class="flex items-center gap-1.5 rounded-lg bg-accent px-4 py-1.5 text-[12px] font-semibold text-white transition hover:bg-accent/90 active:scale-[0.98]">
-          <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-          </svg>
-          Download
-        </a>
-      </div>
-    </nav>
-
+  <div class="flex flex-1 flex-col overflow-x-hidden">
     <!-- ── Hero ─────────────────────────────────────────────────────────────── -->
     <section class="relative flex flex-col items-center justify-center min-h-[92vh] overflow-hidden">
 
@@ -678,23 +654,5 @@ const badgeClass: Record<string, string> = {
         </p>
       </div>
     </section>
-
-    <!-- ── Footer ────────────────────────────────────────────────────────────── -->
-    <footer class="border-t border-white/5 bg-base px-8 py-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-[11px] text-white/25">
-      <div class="flex flex-col sm:flex-row items-center gap-3 sm:gap-5">
-        <div class="flex items-center gap-3">
-          <img src="/icon.png" alt="Vindicta" class="h-5 w-5 opacity-60" />
-          <span>© {{ new Date().getFullYear() }} Surelle-ha. All rights reserved.</span>
-        </div>
-        <span class="text-white/15">·</span>
-        <span class="text-white/20">Built for local-first security review.</span>
-      </div>
-      <div class="flex items-center gap-5">
-        <a href="https://github.com/surelle-ha/vindicta" target="_blank" rel="noopener" class="hover:text-white/60 transition-colors">GitHub</a>
-        <a href="https://github.com/surelle-ha/vindicta/releases" target="_blank" rel="noopener" class="hover:text-white/60 transition-colors">Releases</a>
-        <a href="https://github.com/surelle-ha/vindicta/issues" target="_blank" rel="noopener" class="hover:text-white/60 transition-colors">Issues</a>
-      </div>
-    </footer>
-
   </div>
 </template>

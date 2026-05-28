@@ -1,6 +1,15 @@
 use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Manager,
+    Emitter, Manager,
+};
+
+use std::io::Read;
+
+/// GitHub OAuth App Client ID — baked in at compile time.
+/// Set the GITHUB_CLIENT_ID environment variable before building.
+const GITHUB_CLIENT_ID: &str = match option_env!("GITHUB_CLIENT_ID") {
+    Some(id) => id,
+    None => "",
 };
 
 #[cfg(target_os = "windows")]
@@ -39,6 +48,179 @@ struct PentestRunResult {
     action: String,
     command: String,
     output: String,
+}
+
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AcademyTerminalEvent {
+    run_id: String,
+    stream: String,
+    text: String,
+    done: bool,
+    code: Option<i32>,
+}
+
+/// Download a URL to a temporary file via reqwest (bypasses WebView CSP/CORS).
+/// Returns the absolute path of the temp file so the JS side can read it via
+/// the fs plugin. The caller is responsible for deleting the temp file.
+#[tauri::command]
+async fn download_to_temp(url: String) -> Result<String, String> {
+    let url = url.trim();
+    if !(url.starts_with("https://") || url.starts_with("http://")) {
+        return Err("URL must start with https:// or http://".to_string());
+    }
+    if url.len() > 2048 || url.chars().any(|c| c.is_control()) {
+        return Err("URL is not valid.".to_string());
+    }
+
+    let client = reqwest::Client::builder()
+        .user_agent("Mozilla/5.0 (compatible; Vindicta/0.1; Kokoro model downloader)")
+        .redirect(reqwest::redirect::Policy::limited(15))
+        .timeout(std::time::Duration::from_secs(600))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let resp = client
+        .get(url)
+        .send()
+        .await
+        .map_err(|e| format!("Network error: {}", e))?;
+
+    let status = resp.status();
+    if !status.is_success() {
+        return Err(format!(
+            "HTTP {}: download failed for {}",
+            status.as_u16(),
+            url
+        ));
+    }
+
+    let bytes = resp
+        .bytes()
+        .await
+        .map_err(|e| format!("Failed to read response body: {}", e))?;
+
+    // Write to a uniquely named temp file
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let tmp_path = std::env::temp_dir().join(format!("vindicta-dl-{}.bin", ts));
+
+    std::fs::write(&tmp_path, &bytes).map_err(|e| format!("Failed to write temp file: {}", e))?;
+
+    Ok(tmp_path.to_string_lossy().to_string())
+}
+
+/// Percent-encode a string for application/x-www-form-urlencoded bodies.
+fn form_encode(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for byte in s.as_bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(*byte as char)
+            }
+            b' ' => out.push('+'),
+            b => out.push_str(&format!("%{:02X}", b)),
+        }
+    }
+    out
+}
+
+/// GitHub Device Flow — step 1: request a device code from GitHub.
+/// Returns the user_code to display and the verification_uri to open.
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(rename_all(serialize = "camelCase", deserialize = "snake_case"))]
+struct GithubDeviceCodeResponse {
+    device_code: String,
+    user_code: String,
+    verification_uri: String,
+    expires_in: u64,
+    interval: u64,
+}
+
+#[tauri::command]
+async fn github_request_device_code(scope: String) -> Result<GithubDeviceCodeResponse, String> {
+    if GITHUB_CLIENT_ID.is_empty() {
+        return Err(
+            "GitHub OAuth is not configured for this build. Set GITHUB_CLIENT_ID before compiling."
+                .to_string(),
+        );
+    }
+    let body = format!(
+        "client_id={}&scope={}",
+        form_encode(GITHUB_CLIENT_ID),
+        form_encode(&scope),
+    );
+    let client = reqwest::Client::builder()
+        .user_agent("Vindicta/0.1")
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let resp = client
+        .post("https://github.com/login/device/code")
+        .header("Accept", "application/json")
+        .header("Content-Type", "application/x-www-form-urlencoded")
+        .body(body)
+        .send()
+        .await
+        .map_err(|e| format!("Network error: {}", e))?;
+
+    if !resp.status().is_success() {
+        return Err(format!("GitHub returned HTTP {}", resp.status().as_u16()));
+    }
+
+    resp.json::<GithubDeviceCodeResponse>()
+        .await
+        .map_err(|e| format!("Failed to parse GitHub response: {}", e))
+}
+
+/// GitHub Device Flow — step 2: poll for the access token.
+/// Returns the token on success, or an error string containing the GitHub
+/// `error` field so callers can distinguish `authorization_pending` from
+/// hard failures.
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(rename_all(serialize = "camelCase", deserialize = "snake_case"))]
+struct GithubTokenPollResponse {
+    access_token: Option<String>,
+    token_type: Option<String>,
+    scope: Option<String>,
+    error: Option<String>,
+    error_description: Option<String>,
+}
+
+#[tauri::command]
+async fn github_poll_access_token(device_code: String) -> Result<GithubTokenPollResponse, String> {
+    let grant_type = "urn:ietf:params:oauth:grant-type:device_code";
+    let body = format!(
+        "client_id={}&device_code={}&grant_type={}",
+        form_encode(GITHUB_CLIENT_ID),
+        form_encode(&device_code),
+        form_encode(grant_type),
+    );
+    let client = reqwest::Client::builder()
+        .user_agent("Vindicta/0.1")
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let resp = client
+        .post("https://github.com/login/oauth/access_token")
+        .header("Accept", "application/json")
+        .header("Content-Type", "application/x-www-form-urlencoded")
+        .body(body)
+        .send()
+        .await
+        .map_err(|e| format!("Network error: {}", e))?;
+
+    if !resp.status().is_success() {
+        return Err(format!("GitHub returned HTTP {}", resp.status().as_u16()));
+    }
+
+    resp.json::<GithubTokenPollResponse>()
+        .await
+        .map_err(|e| format!("Failed to parse GitHub token response: {}", e))
 }
 
 #[tauri::command]
@@ -182,9 +364,7 @@ fn wsl_info() -> WslInfo {
         .trim()
         .to_string();
 
-    let list_output = hidden_command("wsl")
-        .args(["--list", "--verbose"])
-        .output();
+    let list_output = hidden_command("wsl").args(["--list", "--verbose"]).output();
 
     let mut distributions = vec![];
     let mut default_distro = String::new();
@@ -416,17 +596,70 @@ printf 'Academy backend ready: /home/{user}/vindicta\n'
 /// Run a shell command as the academy user (30 s timeout, max 200 lines of output).
 #[tauri::command]
 async fn wsl_run_academy_command(distro: String, command: String) -> Result<String, String> {
-    tauri::async_runtime::spawn_blocking(move || wsl_run_academy_command_blocking(&distro, &command))
-        .await
-        .map_err(|error| error.to_string())?
+    tauri::async_runtime::spawn_blocking(move || {
+        wsl_run_academy_command_blocking(&distro, &command)
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 fn wsl_run_academy_command_blocking(distro: &str, command: &str) -> Result<String, String> {
-    // Block obviously destructive patterns
+    validate_academy_command(command)?;
+    run_wsl_shell(distro, Some(ACADEMY_USER), &academy_command_script(command))
+}
+
+#[tauri::command]
+async fn wsl_run_academy_command_stream(
+    app: tauri::AppHandle,
+    distro: String,
+    command: String,
+    run_id: String,
+) -> Result<(), String> {
+    validate_academy_command(&command)?;
+    if run_id.trim().is_empty() {
+        return Err("Missing terminal run id.".to_string());
+    }
+
+    std::thread::spawn(move || {
+        let result = stream_wsl_shell(
+            app.clone(),
+            run_id.clone(),
+            &distro,
+            Some(ACADEMY_USER),
+            &academy_command_script(&command),
+        );
+        if let Err(error) = result {
+            let _ = app.emit(
+                "academy-terminal-chunk",
+                AcademyTerminalEvent {
+                    run_id,
+                    stream: "stderr".to_string(),
+                    text: format!("{}\n", error),
+                    done: true,
+                    code: Some(1),
+                },
+            );
+        }
+    });
+
+    Ok(())
+}
+
+fn validate_academy_command(command: &str) -> Result<(), String> {
     let lower = command.to_lowercase();
     const BLOCKED: &[&str] = &[
-        "rm -rf /", "mkfs", "dd if=", ":(){ :|:& };:", "chmod 000 /", "chown root /",
-        "shutdown", "reboot", "halt", "poweroff", "init 0", "init 6",
+        "rm -rf /",
+        "mkfs",
+        "dd if=",
+        ":(){ :|:& };:",
+        "chmod 000 /",
+        "chown root /",
+        "shutdown",
+        "reboot",
+        "halt",
+        "poweroff",
+        "init 0",
+        "init 6",
     ];
     for b in BLOCKED {
         if lower.contains(b) {
@@ -436,12 +669,15 @@ fn wsl_run_academy_command_blocking(distro: &str, command: &str) -> Result<Strin
     if command.len() > 2000 {
         return Err("Command is too long.".to_string());
     }
+    Ok(())
+}
+
+fn academy_command_script(command: &str) -> String {
     let safe_cmd = command.replace('\'', r#"'\''"#);
-    let script = format!(
-        "set -u\ncd ~/vindicta/workspace 2>/dev/null || cd ~\ntimeout 30s sh -c '{}' 2>&1 | head -300",
+    format!(
+        "set -u\ncd ~/vindicta/workspace 2>/dev/null || cd ~\ntimeout 30s sh -c 'export SUDO_ASKPASS=/bin/false\nsudo() {{ command sudo -n \"$@\"; }}\n{}' </dev/null 2>&1 | awk 'NR<=300 {{ print; fflush() }} NR==301 {{ print \"[vindicta] output truncated after 300 lines.\"; fflush(); exit }}'",
         safe_cmd
-    );
-    run_wsl_shell(distro, Some(ACADEMY_USER), &script)
+    )
 }
 
 /// Remove only the Vindicta-managed user accounts (pentest, academy) and their
@@ -496,6 +732,7 @@ fn run_wsl_shell(distro: &str, user: Option<&str>, script: &str) -> Result<Strin
     }
     let output = command
         .args(["--exec", "sh", "-lc", script])
+        .stdin(std::process::Stdio::null())
         .output()
         .map_err(|error| error.to_string())?;
 
@@ -506,6 +743,114 @@ fn run_wsl_shell(distro: &str, user: Option<&str>, script: &str) -> Result<Strin
         let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
         Err(if stderr.is_empty() { stdout } else { stderr })
     }
+}
+
+fn stream_wsl_shell(
+    app: tauri::AppHandle,
+    run_id: String,
+    distro: &str,
+    user: Option<&str>,
+    script: &str,
+) -> Result<(), String> {
+    let distro = distro.trim();
+    let mut command = hidden_command("wsl");
+    if !distro.is_empty() {
+        command.args(["-d", distro]);
+    }
+    if let Some(user) = user {
+        command.args(["-u", user]);
+    }
+
+    let mut child = command
+        .args(["--exec", "sh", "-lc", script])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|error| error.to_string())?;
+
+    let stdout = child.stdout.take();
+    let stderr = child.stderr.take();
+
+    let mut readers = Vec::new();
+    if let Some(stdout) = stdout {
+        readers.push(spawn_terminal_reader(
+            app.clone(),
+            run_id.clone(),
+            "stdout",
+            stdout,
+        ));
+    }
+    if let Some(stderr) = stderr {
+        readers.push(spawn_terminal_reader(
+            app.clone(),
+            run_id.clone(),
+            "stderr",
+            stderr,
+        ));
+    }
+
+    let status = child.wait().map_err(|error| error.to_string())?;
+    for reader in readers {
+        let _ = reader.join();
+    }
+
+    let _ = app.emit(
+        "academy-terminal-chunk",
+        AcademyTerminalEvent {
+            run_id,
+            stream: "system".to_string(),
+            text: String::new(),
+            done: true,
+            code: status.code(),
+        },
+    );
+    Ok(())
+}
+
+fn spawn_terminal_reader<R>(
+    app: tauri::AppHandle,
+    run_id: String,
+    stream: &'static str,
+    mut reader: R,
+) -> std::thread::JoinHandle<()>
+where
+    R: Read + Send + 'static,
+{
+    std::thread::spawn(move || {
+        let mut buffer = [0_u8; 1024];
+        loop {
+            match reader.read(&mut buffer) {
+                Ok(0) => break,
+                Ok(n) => {
+                    let text = String::from_utf8_lossy(&buffer[..n]).to_string();
+                    let _ = app.emit(
+                        "academy-terminal-chunk",
+                        AcademyTerminalEvent {
+                            run_id: run_id.clone(),
+                            stream: stream.to_string(),
+                            text,
+                            done: false,
+                            code: None,
+                        },
+                    );
+                }
+                Err(error) => {
+                    let _ = app.emit(
+                        "academy-terminal-chunk",
+                        AcademyTerminalEvent {
+                            run_id: run_id.clone(),
+                            stream: "stderr".to_string(),
+                            text: format!("{}\n", error),
+                            done: false,
+                            code: None,
+                        },
+                    );
+                    break;
+                }
+            }
+        }
+    })
 }
 
 fn pentest_tool_mapping(tool_id: &str) -> Option<(&'static str, &'static str)> {
@@ -624,7 +969,10 @@ fi
             let host = normalize_host_target(target)?;
             // Unquote for display since shell_quote wraps in single-quotes
             let host_display = host.trim_matches('\'').to_string();
-            let command = format!("dig +noall +answer ANY {h}; host {h} 2>&1; dig +short MX {h}; dig +short TXT {h}", h = host_display);
+            let command = format!(
+                "dig +noall +answer ANY {h}; host {h} 2>&1; dig +short MX {h}; dig +short TXT {h}",
+                h = host_display
+            );
             Ok((
                 "DNS Reconnaissance".to_string(),
                 command.clone(),
@@ -653,7 +1001,10 @@ host "$HOST" 2>&1 || true
         "ssl_check" => {
             let host_raw = normalize_host_target(target)?;
             let host = host_raw.trim_matches('\'').to_string();
-            let command = format!("openssl s_client -connect {}:443 -showcerts </dev/null 2>&1", host);
+            let command = format!(
+                "openssl s_client -connect {}:443 -showcerts </dev/null 2>&1",
+                host
+            );
             Ok((
                 "SSL/TLS Certificate Check".to_string(),
                 command.clone(),
@@ -748,12 +1099,16 @@ pub fn run() {
             wsl_purge_vindicta_profiles,
             wsl_ensure_academy_backend,
             wsl_run_academy_command,
+            wsl_run_academy_command_stream,
             wsl_start_distribution,
             wsl_ensure_pentest_backend,
             wsl_pentest_tool_status,
             wsl_install_pentest_tool,
             wsl_run_pentest_action,
             fetch_rss_source,
+            download_to_temp,
+            github_request_device_code,
+            github_poll_access_token,
         ])
         .setup(|app| {
             // Build system tray icon — shows the main window on left-click

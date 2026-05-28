@@ -3,6 +3,7 @@ import { Bot, ChevronRight, Loader2, RefreshCw, Router, Send, Sparkles, Terminal
 import { runClaude } from '~/composables/useClaudeShell'
 import { runCodexExec } from '~/composables/useCodexShell'
 import { runOpenRouterChat } from '~/composables/useOpenRouterAI'
+import { runOllamaChat } from '~/composables/useOllamaAI'
 import { useAcademyStore } from '~/stores/academy'
 import type { AcademyAIModel, AcademyChatMessage, AcademyChatQuiz } from '~/stores/academy'
 import type { Lesson } from '~/data/curriculum'
@@ -10,10 +11,15 @@ import type { Lesson } from '~/data/curriculum'
 const props = defineProps<{
   lesson: Lesson
   lessonCompleted: boolean
+  terminalVisible: boolean
 }>()
 
 const emit = defineEmits<{
   markComplete: []
+  'mermaid-diagram': [code: string]
+  'whiteboard-diagrams': [codes: string[]]
+  'toggle-terminal': []
+  'open-terminal': [command: string]
 }>()
 
 interface ChatMessage {
@@ -24,6 +30,7 @@ interface ChatMessage {
   quiz?: ParsedQuiz | null
   createdAt?: string
   model?: Exclude<AcademyAIModel, null>
+  mermaidCode?: string
 }
 
 type ParsedQuiz = AcademyChatQuiz
@@ -66,6 +73,16 @@ const modelOptions: { id: AcademyAIModel; label: string; sublabel: string; note?
     border: 'border-sky-500/25',
     icon: Router,
   },
+  {
+    id: 'ollama',
+    label: 'Ollama',
+    sublabel: 'Local Ollama server',
+    note: app.ollama.url ? `${app.ollama.model} · ${app.ollama.url}` : 'Configure in AI Models',
+    color: 'text-orange-300',
+    bg: 'bg-orange-500/10',
+    border: 'border-orange-500/25',
+    icon: Terminal,
+  },
 ]
 
 async function beginSession() {
@@ -84,31 +101,33 @@ const chatEl = ref<HTMLElement | null>(null)
 let nextId = 1
 
 // ── WSL Practice Terminal ─────────────────────────────────────────────────
-const labTerminalVisible = ref(false)
-const labSuggestedCommand = ref('')
-
-const wslAcademyDistro = computed(() => {
-  const profile = app.wslProfiles.find(p => p.id === 'academy')
-  return profile?.distro ?? ''
-})
-
 function activeModel(): Exclude<AcademyAIModel, null> {
   return academy.aiModel ?? 'claude'
 }
 
 function restoreSession() {
   const stored = academy.getChatSession(props.lesson.id)
-  messages.value = stored.map(message => ({
-    id: message.id,
-    role: message.role,
-    text: message.text,
-    quiz: message.quiz ?? null,
-    createdAt: message.createdAt,
-    model: message.model,
-  }))
+  const restoredDiagrams: string[] = []
+  messages.value = stored.map((message) => {
+    const mermaidMatch = message.text.match(/```mermaid\n?([\s\S]*?)```/m)
+    const mermaidCode = mermaidMatch?.[1]?.trim() || undefined
+    if (mermaidCode && !restoredDiagrams.includes(mermaidCode)) {
+      restoredDiagrams.push(mermaidCode)
+    }
+    return {
+      id: message.id,
+      role: message.role,
+      text: message.text,
+      quiz: message.quiz ?? null,
+      createdAt: message.createdAt,
+      model: message.model,
+      mermaidCode,
+    }
+  })
   nextId = Math.max(0, ...messages.value.map(message => message.id)) + 1
   sessionStarted.value = messages.value.length > 0
   pendingModel.value = academy.aiModel ?? 'claude'
+  emit('whiteboard-diagrams', restoredDiagrams)
   void nextTick().then(scrollToBottom)
 }
 
@@ -182,7 +201,10 @@ function stripLeakedAnswer(text: string): string {
 }
 
 function streamingProfessorText(text: string): string {
-  const visible = stripLeakedAnswer(text.replace(/\r\n/g, '\n'))
+  let visible = stripLeakedAnswer(text.replace(/\r\n/g, '\n'))
+  // Hide incomplete mermaid blocks while streaming
+  visible = visible.replace(/```mermaid[\s\S]*?```/gm, '⏳ Generating diagram…')
+  visible = visible.replace(/```mermaid[\s\S]*$/m, '⏳ Generating diagram…')
   const quizIndex = visible.search(/\n?\s*QUIZ:(MC|TEXT|NUMBER)\b/i)
   if (quizIndex === -1) return visible
   const intro = visible.slice(0, quizIndex).trim()
@@ -196,13 +218,20 @@ async function finalizeProfessorMessage(profMsg: ChatMessage, rawText: string) {
   profMsg.streaming = false
   isStreaming.value = false
   await persistMessages()
+
+  // Detect mermaid diagram and store per-message + emit to parent for whiteboard
+  const mermaidMatch = cleanText.match(/```mermaid\n?([\s\S]*?)```/m)
+  if (mermaidMatch?.[1]?.trim()) {
+    profMsg.mermaidCode = mermaidMatch[1].trim()
+    emit('mermaid-diagram', mermaidMatch[1].trim())
+  }
+
   if (readyForNext && !props.lessonCompleted) {
     emit('markComplete')
   }
   // Spawn the WSL practice terminal if the professor requested it
   if (labSpawn) {
-    labSuggestedCommand.value = labCmd ?? ''
-    labTerminalVisible.value = true
+    emit('open-terminal', labCmd ?? '')
   }
   await nextTick()
   scrollToBottom()
@@ -249,6 +278,15 @@ QUIZ:TEXT
 [Your question here]
 /QUIZ
 
+DIAGRAMS (optional, use sparingly):
+When a concept benefits from a visual — flowchart, sequence diagram, tree, or process flow — include a Mermaid diagram.
+Wrap it in a fenced code block:
+\`\`\`mermaid
+graph TD
+  A --> B
+\`\`\`
+Keep diagrams compact (4–8 nodes max). The diagram will open automatically in the student's whiteboard panel beside the lesson.
+
 PRACTICE TERMINAL (WSL academy sandbox):
 The student has access to a live Linux sandbox. Use it sparingly — only when hands-on practice genuinely reinforces the concept.
 Place one of these signals on its own line in your message:
@@ -263,14 +301,47 @@ Current date: ${new Date().toLocaleDateString()}
 Be conversational and specific to today's lesson.`
 }
 
-function buildPrompt(userMessage: string): string {
-  const priorMessages = messages.value.slice(0, -1)
+function conversationText(message: ChatMessage): string {
+  const parts: string[] = []
+  if (message.text.trim()) parts.push(message.text.trim())
+  if (message.quiz) {
+    const quizLines = [`[Professor asked a ${message.quiz.type.toUpperCase()} quiz]`, `Question: ${message.quiz.question}`]
+    if (message.quiz.type === 'mc' && message.quiz.options?.length) {
+      quizLines.push(...message.quiz.options.map(option => `${option.letter}) ${option.text}`))
+    }
+    if (message.quiz.answered) {
+      const answer = message.quiz.type === 'mc'
+        ? message.quiz.selectedAnswer
+        : message.quiz.studentInput
+      if (answer) quizLines.push(`Student answered: ${answer}`)
+    }
+    else {
+      quizLines.push('Student has not answered this quiz yet.')
+    }
+    parts.push(quizLines.join('\n'))
+  }
+  return parts.join('\n\n').trim()
+}
+
+function conversationMessages(limit = 18) {
+  return messages.value
+    .filter(message => !message.streaming)
+    .map(message => ({
+      role: message.role === 'professor' ? 'assistant' as const : 'user' as const,
+      content: conversationText(message),
+    }))
+    .filter(message => message.content.trim())
+    .slice(-limit)
+}
+
+function buildPrompt(): string {
+  const priorMessages = messages.value.filter(message => !message.streaming)
   const history = priorMessages.slice(-14).map(m => {
     const prefix = m.role === 'professor' ? 'Professor' : 'Student'
-    return `${prefix}: ${m.text}`
+    return `${prefix}: ${conversationText(m)}`
   }).join('\n\n')
   const memory = priorMessages.length
-    ? priorMessages.map(m => `${m.role === 'professor' ? 'Professor' : 'Student'} (${m.model ?? 'saved'}): ${m.text}`).slice(-24).join('\n')
+    ? priorMessages.map(m => `${m.role === 'professor' ? 'Professor' : 'Student'} (${m.model ?? 'saved'}): ${conversationText(m)}`).slice(-24).join('\n')
     : 'No previous lesson conversation yet.'
 
   return `${buildSystemPrompt()}
@@ -280,8 +351,6 @@ ${memory}
 
 --- Conversation so far ---
 ${history}
-
-Student: ${userMessage}
 
 Professor:`
 }
@@ -310,11 +379,21 @@ async function sendMessage(text: string) {
         model: app.openRouter.model,
         messages: [
           { role: 'system', content: buildSystemPrompt() },
-          ...messages.value.slice(0, -2).slice(-18).map(message => ({
-            role: message.role === 'professor' ? 'assistant' as const : 'user' as const,
-            content: message.text,
-          })),
-          { role: 'user', content: text.trim() },
+          ...conversationMessages(),
+        ],
+      })
+      rawBuffer = result
+      await finalizeProfessorMessage(profMsg, rawBuffer)
+      return
+    }
+
+    if (activeModel() === 'ollama') {
+      const result = await runOllamaChat({
+        url: app.ollama.url,
+        model: app.ollama.model,
+        messages: [
+          { role: 'system', content: buildSystemPrompt() },
+          ...conversationMessages(),
         ],
       })
       rawBuffer = result
@@ -324,7 +403,7 @@ async function sendMessage(text: string) {
 
     if (activeModel() === 'codex') {
       const result = await runCodexExec({
-        prompt: buildPrompt(text.trim()),
+        prompt: buildPrompt(),
         projectPath,
         sandbox: 'read-only',
         reasoningEffort: 'medium',
@@ -335,7 +414,7 @@ async function sendMessage(text: string) {
     }
 
     await runClaude({
-      prompt: buildPrompt(text.trim()),
+      prompt: buildPrompt(),
       projectPath,
       onLine(line: string) {
         try {
@@ -402,6 +481,7 @@ async function resetSession() {
   await academy.clearChatSession(props.lesson.id)
   sessionStarted.value = false
   pendingModel.value = academy.aiModel ?? 'claude'
+  emit('whiteboard-diagrams', [])
 }
 
 // ── Quiz handlers ─────────────────────────────────────────────────────────
@@ -434,9 +514,22 @@ function scrollToBottom() {
   }
 }
 
+function handleBubbleClick(e: MouseEvent, msg: ChatMessage) {
+  if ((e.target as Element).classList.contains('mermaid-chip') && msg.mermaidCode) {
+    emit('mermaid-diagram', msg.mermaidCode)
+  }
+}
+
 // ── Text renderer ─────────────────────────────────────────────────────────
 function renderText(text: string): string {
-  return text
+  // Extract mermaid blocks before HTML-escaping so their content is preserved
+  const mermaidCount = { n: 0 }
+  let processed = text.replace(/```mermaid\n?([\s\S]*?)```/gm, () => {
+    mermaidCount.n++
+    return '\x01MERMAID\x01'
+  })
+
+  processed = processed
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
@@ -444,6 +537,13 @@ function renderText(text: string): string {
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
     .replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>')
     .replace(/\n/g, '<br>')
+
+  // Replace placeholder with a chip
+  processed = processed.replace(/\x01MERMAID\x01/g,
+    '<span class="mermaid-chip">📊 Open diagram in whiteboard →</span>',
+  )
+
+  return processed
 }
 
 onMounted(() => {
@@ -550,7 +650,7 @@ watch(() => props.lesson.id, () => {
           <div class="flex-1 min-w-0">
             <p class="text-xs font-semibold text-[var(--text)]">Professor Vindicta</p>
             <p class="text-[10px] text-[var(--text-faint)]">
-              {{ academy.aiModel === 'codex' ? 'Codex' : academy.aiModel === 'openrouter' ? 'OpenRouter' : 'Claude' }} · saved memory
+              {{ academy.aiModel === 'codex' ? 'Codex' : academy.aiModel === 'openrouter' ? 'OpenRouter' : academy.aiModel === 'ollama' ? 'Ollama' : 'Claude' }} · saved memory
             </p>
           </div>
           <button
@@ -580,6 +680,7 @@ watch(() => props.lesson.id, () => {
                   v-if="msg.text"
                   class="professor-bubble rounded-xl rounded-tl-none border border-indigo-500/15 bg-indigo-500/[0.08] px-3 py-2.5 text-xs leading-relaxed text-[var(--text-muted)]"
                   v-html="renderText(msg.text)"
+                  @click="handleBubbleClick($event, msg)"
                 />
                 <!-- Streaming indicator -->
                 <div v-if="msg.streaming && !msg.text" class="flex items-center gap-1.5 px-1">
@@ -689,35 +790,17 @@ watch(() => props.lesson.id, () => {
             <!-- Manual terminal toggle -->
             <button
               class="flex size-6 shrink-0 items-center justify-center rounded-lg transition-colors"
-              :class="labTerminalVisible
+              :class="terminalVisible
                 ? 'bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30'
                 : 'text-[var(--text-faint)] hover:bg-white/[0.06] hover:text-[var(--text-muted)]'"
               title="Toggle practice terminal"
-              @click="labTerminalVisible = !labTerminalVisible"
+              @click="emit('toggle-terminal')"
             >
               <Terminal class="size-3.5" />
             </button>
           </div>
           <p class="mt-1 px-1 text-[10px] text-[var(--text-faint)]">Enter to send · Shift+Enter for new line · <span class="text-emerald-400/60">⬛ terminal</span></p>
         </div>
-
-        <!-- WSL Practice Terminal (professor-triggered or manually opened) -->
-        <Transition
-          enter-active-class="transition-all duration-200 ease-out"
-          enter-from-class="opacity-0 -translate-y-1 max-h-0"
-          enter-to-class="opacity-100 translate-y-0 max-h-96"
-          leave-active-class="transition-all duration-150 ease-in"
-          leave-from-class="opacity-100 translate-y-0 max-h-96"
-          leave-to-class="opacity-0 -translate-y-1 max-h-0"
-        >
-          <div v-if="labTerminalVisible" class="shrink-0 overflow-hidden border-t border-emerald-500/15 p-3">
-            <AcademyWSLTerminal
-              :distro="wslAcademyDistro"
-              :suggested-command="labSuggestedCommand"
-              @close="labTerminalVisible = false"
-            />
-          </div>
-        </Transition>
       </div>
     </Transition>
   </div>
@@ -735,5 +818,26 @@ watch(() => props.lesson.id, () => {
 .professor-bubble :deep(strong) {
   color: var(--text);
   font-weight: 600;
+}
+
+.professor-bubble :deep(.mermaid-chip) {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 4px 0;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(20, 184, 166, 0.25);
+  background: rgba(20, 184, 166, 0.08);
+  color: rgb(94, 234, 212);
+  font-size: 10.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.professor-bubble :deep(.mermaid-chip:hover) {
+  background: rgba(20, 184, 166, 0.18);
+  border-color: rgba(20, 184, 166, 0.45);
 }
 </style>

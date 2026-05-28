@@ -18,7 +18,7 @@
     "id": "knrkzqbZqNkj47vVujVpG",
     "ticketCounter": 0,
     "createdAt": "2026-05-27T03:35:00.128Z",
-    "updatedAt": "2026-05-27T16:39:02.285Z",
+    "updatedAt": "2026-05-28T07:23:21.296Z",
     "pentestEnabled": true,
     "pentestPromptDismissed": true,
     "pentestTargetUrl": "https://vindicta.surelle.xyz",
@@ -95,11 +95,11 @@
   "tickets": [],
   "sprints": [],
   "security": {
-    "findingCounter": 128,
+    "findingCounter": 133,
     "findings": [
       {
-        "id": "sKBzBl7TZJi91DDBrBfJw",
-        "number": 128,
+        "id": "OvosgoFO4PsigevylTb_o",
+        "number": 133,
         "title": "Floating dependency versions detected",
         "severity": "low",
         "status": "open",
@@ -109,8 +109,8 @@
         "detail": "One or more dependencies use latest or wildcard versions, increasing supply-chain drift risk.",
         "evidence": "@pinia/nuxt@latest in D:\\Workspace\\vindicta\\apps\\desktop\\package.json\n@vueuse/core@latest in D:\\Workspace\\vindicta\\apps\\desktop\\package.json\n@vueuse/nuxt@latest in D:\\Workspace\\vindicta\\apps\\desktop\\package.json\nlucide-vue-next@latest in D:\\Workspace\\vindicta\\apps\\desktop\\package.json\nlucide-vue-next@latest in D:\\Workspace\\vindicta\\apps\\landing\\package.json\nnanoid@latest in D:\\Workspace\\vindicta\\apps\\desktop\\package.json\npinia@latest in D:\\Workspace\\vindicta\\apps\\desktop\\package.json\ntailwindcss@latest in D:\\Workspace\\vindicta\\apps\\desktop\\package.json\ntailwindcss@latest in D:\\Workspace\\vindicta\\apps\\landing\\package.json\ntypescript@latest in D:\\Workspace\\vindicta\\apps\\desktop\\package.json\ntypescript@latest in D:\\Workspace\\vindicta\\apps\\landing\\package.json\nvue@latest in D:\\Workspace\\vindicta\\apps\\desktop\\package.json\nvue@latest in D:\\Workspace\\vindicta\\apps\\landing\\package.json\nvue-router@latest in D:\\Workspace\\vindicta\\apps\\desktop\\package.json",
         "recommendation": "Pin package ranges intentionally and rely on reviewed dependency update workflows.",
-        "createdAt": "2026-05-27T16:39:00.818Z",
-        "updatedAt": "2026-05-27T16:39:00.818Z",
+        "createdAt": "2026-05-28T06:12:31.829Z",
+        "updatedAt": "2026-05-28T06:12:31.829Z",
         "resolvedAt": null,
         "scanId": null
       },

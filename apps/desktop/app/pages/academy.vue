@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   Award,
   BookOpen,
+  ChartSpline,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
@@ -10,11 +11,13 @@ import {
   Clock,
   Download,
   GraduationCap,
+  Headphones,
   Loader2,
   Lock,
   Mic,
   MoreHorizontal,
   PartyPopper,
+  PanelTopOpen,
   RotateCcw,
   Shield,
   Sparkles,
@@ -29,6 +32,8 @@ import { LESSONS, WEEKS, TOTAL_DAYS, getLesson, getWeekMeta } from '~/data/curri
 import type { Lesson, Week } from '~/data/curriculum'
 import AIProfessorChat from '~/components/academy/AIProfessorChat.vue'
 import AcademyAudioPlayer from '~/components/academy/AcademyAudioPlayer.vue'
+import AcademyWSLTerminal from '~/components/academy/AcademyWSLTerminal.vue'
+import AcademyWhiteboard from '~/components/academy/AcademyWhiteboard.vue'
 import { useAcademyTTS } from '~/composables/useAcademyTTS'
 import type { TTSScriptModel } from '~/composables/useAcademyTTS'
 
@@ -50,6 +55,56 @@ const lessonActionMenuId = ref<string | null>(null)
 const showLeaveLessonModal = ref(false)
 const showCompletionModal = ref(false)
 const downloadingCertificate = ref(false)
+const windowMaximized = ref(true)
+const maximizeWarningDismissed = ref(false)
+const showMaximizeLessonWarning = computed(() =>
+  view.value === 'lesson'
+  && !!currentLesson.value
+  && !windowMaximized.value
+  && !maximizeWarningDismissed.value,
+)
+let windowResizeTimer: ReturnType<typeof setTimeout> | null = null
+
+async function refreshWindowMaximized() {
+  if (typeof window === 'undefined') return
+  try {
+    const { getCurrentWindow } = await import('@tauri-apps/api/window')
+    windowMaximized.value = await getCurrentWindow().isMaximized()
+  }
+  catch {
+    const widthGap = Math.abs(window.outerWidth - window.screen.availWidth)
+    const heightGap = Math.abs(window.outerHeight - window.screen.availHeight)
+    windowMaximized.value = widthGap <= 24 && heightGap <= 32
+  }
+}
+
+function scheduleWindowMaximizeCheck() {
+  if (windowResizeTimer) clearTimeout(windowResizeTimer)
+  windowResizeTimer = setTimeout(() => {
+    void refreshWindowMaximized()
+  }, 120)
+}
+
+function dismissMaximizeLessonWarning() {
+  maximizeWarningDismissed.value = true
+  if (typeof localStorage !== 'undefined') {
+    localStorage.setItem('vindicta:academy:maximize-warning-dismissed', 'true')
+  }
+}
+
+// ── Bulk TTS state ─────────────────────────────────────────────────────────
+const showBulkTTSModal    = ref(false)
+const bulkTTSModel        = ref<TTSScriptModel>('claude')
+const bulkQueue           = ref<string[]>([])
+const bulkRunning         = ref(false)
+const bulkStopRequested   = ref(false)
+const bulkIdx             = ref(0)
+const bulkCurrentLesson   = computed(() =>
+  bulkRunning.value ? (LESSONS.find(l => l.id === bulkQueue.value[bulkIdx.value]) ?? null) : null,
+)
+
+// ── TTS suggestion modal ───────────────────────────────────────────────────
+const showTTSSuggestionModal = ref(false)
 
 const ttsModelOptions: { id: TTSScriptModel; label: string; description: string }[] = [
   { id: 'claude',      label: 'Claude',      description: 'Anthropic Claude Code CLI' },
@@ -94,6 +149,54 @@ function toggleLessonActions(lesson: Lesson) {
   lessonActionMenuId.value = lessonActionMenuId.value === lesson.id ? null : lesson.id
 }
 
+function openBulkTTSModal() {
+  bulkQueue.value = LESSONS
+    .filter(l => !tts.cachedLessonIds.value.has(l.id) && !tts.generatingLessonIds.value.has(l.id))
+    .map(l => l.id)
+  bulkTTSModel.value = tts.scriptModel.value
+  showBulkTTSModal.value = true
+}
+
+function toggleBulkLesson(lessonId: string) {
+  if (bulkRunning.value) return
+  const idx = bulkQueue.value.indexOf(lessonId)
+  if (idx >= 0) bulkQueue.value.splice(idx, 1)
+  else bulkQueue.value.push(lessonId)
+}
+
+async function startBulkTTS() {
+  if (bulkRunning.value || bulkQueue.value.length === 0) return
+  bulkRunning.value = true
+  bulkStopRequested.value = false
+  bulkIdx.value = 0
+  tts.setScriptModel(bulkTTSModel.value)
+  const queue = [...bulkQueue.value]
+  for (let i = 0; i < queue.length; i++) {
+    if (bulkStopRequested.value) break
+    bulkIdx.value = i
+    const lesson = LESSONS.find(l => l.id === queue[i])
+    if (!lesson || tts.cachedLessonIds.value.has(lesson.id)) continue
+    try {
+      await tts.createTTS(lesson, bulkTTSModel.value)
+    } catch {
+      // continue to next lesson on error
+    }
+  }
+  bulkRunning.value = false
+  bulkIdx.value = 0
+}
+
+function stopBulkTTS() {
+  bulkStopRequested.value = true
+}
+
+function dismissTTSSuggestion(permanent = false) {
+  showTTSSuggestionModal.value = false
+  if (permanent) {
+    localStorage.setItem('vindicta:academy:tts:suggest-dismissed', 'true')
+  }
+}
+
 function requestLeaveLesson() {
   showLeaveLessonModal.value = true
 }
@@ -110,12 +213,19 @@ watch([view, currentLesson] as const, async ([v, lesson]) => {
     URL.revokeObjectURL(currentAudioUrl.value)
     currentAudioUrl.value = null
   }
+  if (v === 'lesson') {
+    void refreshWindowMaximized()
+  }
   if (v === 'lesson' && lesson) {
     currentAudioUrl.value = await tts.loadAudio(lesson.id)
   }
 })
 
 onMounted(async () => {
+  maximizeWarningDismissed.value = localStorage.getItem('vindicta:academy:maximize-warning-dismissed') === 'true'
+  window.addEventListener('resize', scheduleWindowMaximizeCheck)
+  await refreshWindowMaximized()
+
   await academy.loadFromDisk()
   setupCertificateName.value = academy.certificateName ?? ''
   if (!academy.setupComplete) {
@@ -131,6 +241,22 @@ onMounted(async () => {
       const last = getLesson(academy.lastVisitedLessonId)
       if (last && isLessonUnlocked(last)) currentLesson.value = last
     }
+  }
+
+  // Randomly suggest TTS narration if user hasn't dismissed it and has no audio yet
+  const suggestionDismissed = localStorage.getItem('vindicta:academy:tts:suggest-dismissed') === 'true'
+  if (!suggestionDismissed) {
+    const delay = 20000 + Math.random() * 25000 // 20–45 seconds
+    setTimeout(async () => {
+      if (
+        view.value === 'course' &&
+        tts.cachedLessonIds.value.size === 0 &&
+        !showBulkTTSModal.value &&
+        (await tts.checkKokoroReady())
+      ) {
+        showTTSSuggestionModal.value = true
+      }
+    }, delay)
   }
 })
 
@@ -188,13 +314,13 @@ const resumeLesson = computed(() => {
 })
 
 const activeMilestones = computed(() => WEEKS.map(week => {
-  const lessons = LESSONS.filter(lesson => lesson.week === week.number && !isIntroLesson(lesson))
+  const lessons = LESSONS.filter(lesson => lesson.week === week.number)
   const completed = lessons.filter(lesson => academy.isCompleted(lesson.id)).length
   return {
     ...week,
     total: lessons.length,
     completed,
-    percent: lessons.length ? Math.round((completed / lessons.length) * 100) : 100,
+    percent: lessons.length ? Math.round((completed / lessons.length) * 100) : 0,
   }
 }))
 
@@ -245,6 +371,7 @@ function lessonCardTheme(lesson: Lesson): Record<string, string> {
 function openLesson(lesson: Lesson) {
   lessonActionMenuId.value = null
   if (!isLessonUnlocked(lesson)) return
+  resetWhiteboardForLesson()
   currentLesson.value = lesson
   view.value = 'lesson'
   void academy.startLesson(lesson.id)
@@ -272,6 +399,167 @@ function handleLessonCardClick(e: MouseEvent, lesson: Lesson) {
 
 const lessonContentEl = ref<HTMLElement | null>(null)
 
+// ── Whiteboard ─────────────────────────────────────────────────────────────
+type WhiteboardItem = {
+  id: string
+  type: 'diagram'
+  title: string
+  content: string
+  createdAt: string
+}
+
+const showWhiteboard = ref(false)
+const whiteboardItems = ref<WhiteboardItem[]>([])
+const activeWhiteboardItemId = ref('')
+const whiteboardItemSeq = ref(1)
+
+// ── Practice terminal drawer ───────────────────────────────────────────────
+const labTerminalVisible = ref(false)
+const labSuggestedCommand = ref('')
+const terminalHeight = ref(320)
+const terminalExpanded = ref(false)
+const isResizingTerminal = ref(false)
+let terminalResizeStartY = 0
+let terminalResizeStartHeight = 0
+
+const appStore = useAppStore()
+const wslAcademyDistro = computed(() => {
+  const profile = appStore.wslProfiles.find(p => p.id === 'academy')
+  return profile?.distro ?? ''
+})
+const terminalDrawerHeight = computed(() => terminalExpanded.value ? 'calc(100% - 1rem)' : `${terminalHeight.value}px`)
+
+function onMermaidDiagram(code: string) {
+  addWhiteboardDiagram(code, true)
+}
+
+function syncWhiteboardDiagrams(codes: string[]) {
+  showWhiteboard.value = false
+  whiteboardItems.value = []
+  activeWhiteboardItemId.value = ''
+  whiteboardItemSeq.value = 1
+  codes.forEach(code => addWhiteboardDiagram(code, false))
+  if (whiteboardItems.value[0]) {
+    activeWhiteboardItemId.value = whiteboardItems.value[0].id
+  }
+}
+
+function addWhiteboardDiagram(code: string, openBoard: boolean) {
+  const trimmed = code.trim()
+  if (!trimmed) return
+  const existing = whiteboardItems.value.find(item => item.type === 'diagram' && item.content === trimmed)
+  if (existing) {
+    activeWhiteboardItemId.value = existing.id
+    if (openBoard) showWhiteboard.value = true
+    return
+  }
+
+  const diagramCount = whiteboardItems.value.filter(item => item.type === 'diagram').length + 1
+  const item: WhiteboardItem = {
+    id: `diagram-${Date.now()}-${whiteboardItemSeq.value++}`,
+    type: 'diagram',
+    title: `Chart ${diagramCount}`,
+    content: trimmed,
+    createdAt: new Date().toISOString(),
+  }
+  whiteboardItems.value.push(item)
+  activeWhiteboardItemId.value = item.id
+  if (openBoard) {
+    showWhiteboard.value = true
+  }
+}
+
+function resetWhiteboardForLesson() {
+  showWhiteboard.value = false
+  whiteboardItems.value = []
+  activeWhiteboardItemId.value = ''
+  whiteboardItemSeq.value = 1
+  labTerminalVisible.value = false
+  labSuggestedCommand.value = ''
+  terminalExpanded.value = false
+}
+
+function selectWhiteboardItem(id: string) {
+  activeWhiteboardItemId.value = id
+}
+
+function openLabTerminal(command = '') {
+  labSuggestedCommand.value = command
+  labTerminalVisible.value = true
+}
+
+function toggleLabTerminal() {
+  labTerminalVisible.value = !labTerminalVisible.value
+}
+
+function toggleTerminalExpanded() {
+  terminalExpanded.value = !terminalExpanded.value
+}
+
+function startTerminalResize(e: MouseEvent) {
+  terminalExpanded.value = false
+  isResizingTerminal.value = true
+  terminalResizeStartY = e.clientY
+  terminalResizeStartHeight = terminalHeight.value
+  document.addEventListener('mousemove', doTerminalResize)
+  document.addEventListener('mouseup', stopTerminalResize)
+  e.preventDefault()
+}
+
+function doTerminalResize(e: MouseEvent) {
+  if (!isResizingTerminal.value) return
+  const delta = terminalResizeStartY - e.clientY
+  terminalHeight.value = Math.max(220, Math.min(620, terminalResizeStartHeight + delta))
+}
+
+function stopTerminalResize() {
+  isResizingTerminal.value = false
+  document.removeEventListener('mousemove', doTerminalResize)
+  document.removeEventListener('mouseup', stopTerminalResize)
+}
+
+// ── Chat resize ────────────────────────────────────────────────────────────
+const chatWidth = ref(352) // 22rem default
+const isResizing = ref(false)
+let resizeStartX = 0
+let resizeStartWidth = 0
+const chatPanelStyle = computed(() => ({
+  width: `${chatWidth.value}px`,
+  height: labTerminalVisible.value && academy.mode === 'ai-assisted'
+    ? `calc(100% - ${terminalDrawerHeight.value})`
+    : '100%',
+}))
+
+function startResize(e: MouseEvent) {
+  isResizing.value = true
+  resizeStartX = e.clientX
+  resizeStartWidth = chatWidth.value
+  document.addEventListener('mousemove', doResize)
+  document.addEventListener('mouseup', stopResize)
+  e.preventDefault()
+}
+
+function doResize(e: MouseEvent) {
+  if (!isResizing.value) return
+  const delta = resizeStartX - e.clientX
+  chatWidth.value = Math.max(260, Math.min(600, resizeStartWidth + delta))
+}
+
+function stopResize() {
+  isResizing.value = false
+  document.removeEventListener('mousemove', doResize)
+  document.removeEventListener('mouseup', stopResize)
+}
+
+onUnmounted(() => {
+  document.removeEventListener('mousemove', doResize)
+  document.removeEventListener('mouseup', stopResize)
+  document.removeEventListener('mousemove', doTerminalResize)
+  document.removeEventListener('mouseup', stopTerminalResize)
+  window.removeEventListener('resize', scheduleWindowMaximizeCheck)
+  if (windowResizeTimer) clearTimeout(windowResizeTimer)
+})
+
 const nextLesson = computed<Lesson | null>(() => {
   if (!currentLesson.value) return null
   const idx = LESSONS.findIndex(l => l.id === currentLesson.value!.id)
@@ -292,6 +580,9 @@ async function markComplete() {
 
 function goToLesson(lesson: Lesson | null) {
   if (!lesson || !isLessonUnlocked(lesson)) return
+  if (currentLesson.value?.id !== lesson.id) {
+    resetWhiteboardForLesson()
+  }
   currentLesson.value = lesson
   void academy.startLesson(lesson.id)
   void academy.setLastVisited('week-' + lesson.week, lesson.id)
@@ -648,6 +939,17 @@ async function resetAcademy() {
             · <span class="capitalize">{{ academy.mode ?? 'manual' }}</span> mode
           </p>
         </div>
+        <!-- Narration button -->
+        <button
+          class="flex shrink-0 items-center gap-1.5 rounded-lg border border-[var(--border)] px-2.5 py-1.5 text-[11px] text-[var(--text-faint)] transition-colors hover:border-teal-500/30 hover:bg-teal-500/[0.06] hover:text-teal-300"
+          :class="bulkRunning ? 'border-teal-500/30 bg-teal-500/[0.06] text-teal-300' : ''"
+          title="Manage audio narrations"
+          @click="openBulkTTSModal"
+        >
+          <Loader2 v-if="bulkRunning" class="size-3.5 animate-spin" />
+          <Headphones v-else class="size-3.5" />
+          <span class="hidden sm:inline">{{ bulkRunning ? `Generating ${bulkIdx + 1}/${bulkQueue.length}` : 'Narration' }}</span>
+        </button>
         <!-- Progress bar -->
         <div class="flex items-center gap-3 shrink-0">
           <div class="w-28 rounded-full bg-white/[0.06] h-1.5">
@@ -912,6 +1214,20 @@ async function resetAcademy() {
           :lesson-title="currentLesson.title"
           @close="() => { if (currentAudioUrl) { URL.revokeObjectURL(currentAudioUrl); currentAudioUrl = null } }"
         />
+        <!-- Whiteboard toggle -->
+        <button
+          v-if="whiteboardItems.length > 0 && academy.mode === 'ai-assisted'"
+          class="flex shrink-0 items-center gap-1.5 rounded-lg border px-2 py-1 text-[10px] font-medium transition-colors"
+          :class="showWhiteboard
+            ? 'border-teal-500/30 bg-teal-500/10 text-teal-300'
+            : 'border-[var(--border)] text-[var(--text-faint)] hover:border-teal-500/25 hover:text-teal-300'"
+          title="Toggle whiteboard"
+          @click="showWhiteboard = !showWhiteboard"
+        >
+          <ChartSpline class="size-3" />
+          <span>Board</span>
+          <span v-if="whiteboardItems.length" class="ml-0.5 text-teal-300/70">{{ whiteboardItems.length }}</span>
+        </button>
 
         <!-- Completion status -->
         <div class="flex shrink-0 items-center gap-2">
@@ -946,16 +1262,39 @@ async function resetAcademy() {
         </div>
       </div>
 
-      <!-- Content area: split when AI mode -->
-      <div
-        class="flex flex-1 overflow-hidden"
-        :class="academy.mode === 'ai-assisted' ? 'gap-0' : ''"
+      <Transition
+        enter-active-class="transition-all duration-200 ease-out overflow-hidden"
+        enter-from-class="opacity-0 -translate-y-2 max-h-0"
+        enter-to-class="opacity-100 translate-y-0 max-h-24"
+        leave-active-class="transition-all duration-150 ease-in overflow-hidden"
+        leave-from-class="opacity-100 translate-y-0 max-h-24"
+        leave-to-class="opacity-0 -translate-y-2 max-h-0"
       >
-        <!-- Lesson content -->
+        <div
+          v-if="showMaximizeLessonWarning"
+          class="flex shrink-0 items-center gap-3 border-b border-amber-500/20 bg-amber-500/[0.08] px-4 py-2.5"
+        >
+          <AlertTriangle class="size-4 shrink-0 text-amber-300" />
+          <p class="min-w-0 flex-1 text-[11px] leading-relaxed text-amber-100/90">
+            Lessons work best in a maximized window so the lesson, professor, whiteboard, and terminal all have room.
+          </p>
+          <button
+            class="shrink-0 rounded-lg border border-amber-400/20 px-2.5 py-1 text-[10px] font-medium text-amber-100 transition-colors hover:bg-amber-400/10"
+            @click="dismissMaximizeLessonWarning"
+          >
+            Dismiss
+          </button>
+        </div>
+      </Transition>
+
+      <!-- Content area: split when AI mode -->
+      <div class="relative flex flex-1 overflow-hidden" :class="(isResizing || isResizingTerminal) ? 'select-none' : ''">
+        <!-- Lesson content wrapper (relative so whiteboard can overlay it) -->
+        <div class="relative flex-1 overflow-hidden">
         <div
           ref="lessonContentEl"
-          class="flex-1 overflow-y-auto p-6 custom-scroll"
-          :class="academy.mode === 'ai-assisted' ? 'border-r border-[var(--border)]' : 'mx-auto max-w-3xl'"
+          class="h-full overflow-y-auto p-6 custom-scroll"
+          :class="academy.mode !== 'ai-assisted' ? 'mx-auto max-w-3xl' : ''"
         >
           <!-- Objectives -->
           <div
@@ -1012,17 +1351,101 @@ async function resetAcademy() {
           </div>
         </div>
 
-        <!-- AI Professor Chat panel (AI mode only) -->
-        <div
-          v-if="academy.mode === 'ai-assisted'"
-          class="flex w-[22rem] shrink-0 flex-col overflow-hidden"
-        >
-          <AIProfessorChat
-            :lesson="currentLesson"
-            :lesson-completed="academy.isCompleted(currentLesson.id)"
-            @mark-complete="markComplete"
-          />
+          <button
+            v-if="!showWhiteboard && whiteboardItems.length > 0 && academy.mode === 'ai-assisted'"
+            class="absolute right-4 top-4 z-20 flex items-center gap-1.5 rounded-lg border border-teal-500/25 bg-[var(--bg-surface)] px-3 py-2 text-[10px] font-semibold uppercase tracking-widest text-teal-300 shadow-lg shadow-black/30 transition-colors hover:border-teal-400/45 hover:bg-teal-500/10"
+            title="Open whiteboard"
+            @click="showWhiteboard = true"
+          >
+            <PanelTopOpen class="size-3" />
+            Board
+            <span v-if="whiteboardItems.length" class="text-teal-300/70">{{ whiteboardItems.length }}</span>
+          </button>
+
+          <!-- Whiteboard overlay (absolute, top drawer over lesson content) -->
+          <Transition
+            enter-active-class="transition-all duration-300 ease-out"
+            enter-from-class="opacity-0 -translate-y-full"
+            enter-to-class="opacity-100 translate-y-0"
+            leave-active-class="transition-all duration-200 ease-in"
+            leave-from-class="opacity-100 translate-y-0"
+            leave-to-class="opacity-0 -translate-y-full"
+          >
+            <div
+              v-if="showWhiteboard && academy.mode === 'ai-assisted'"
+              class="absolute inset-0 z-30 flex flex-col overflow-visible shadow-2xl shadow-black/60"
+            >
+              <AcademyWhiteboard
+                class="rounded-b-xl"
+                :items="whiteboardItems"
+                :selected-id="activeWhiteboardItemId"
+                @close="showWhiteboard = false"
+                @select="selectWhiteboardItem"
+              />
+            </div>
+          </Transition>
         </div>
+
+        <Transition
+          enter-active-class="transition-all duration-200 ease-out"
+          enter-from-class="opacity-0 translate-y-4"
+          enter-to-class="opacity-100 translate-y-0"
+          leave-active-class="transition-all duration-150 ease-in"
+          leave-from-class="opacity-100 translate-y-0"
+          leave-to-class="opacity-0 translate-y-4"
+        >
+          <div
+            v-if="labTerminalVisible && academy.mode === 'ai-assisted'"
+            class="absolute inset-x-0 bottom-0 z-50 border-t border-emerald-500/25 bg-[#050507] shadow-2xl shadow-black/70"
+            :style="{ height: terminalDrawerHeight }"
+          >
+            <div
+              class="group h-2 cursor-row-resize bg-emerald-500/10 transition-colors hover:bg-emerald-500/25"
+              @mousedown="startTerminalResize"
+            >
+              <div class="mx-auto h-full w-20 rounded-full bg-emerald-400/30 transition-colors group-hover:bg-emerald-300/60" />
+            </div>
+            <AcademyWSLTerminal
+              class="h-[calc(100%_-_0.5rem)] rounded-none border-x-0 border-b-0"
+              :distro="wslAcademyDistro"
+              :suggested-command="labSuggestedCommand"
+              :expanded="terminalExpanded"
+              @close="labTerminalVisible = false"
+              @toggle-expand="toggleTerminalExpanded"
+            />
+          </div>
+        </Transition>
+
+        <!-- Resize handle + Chat panel (AI mode only) -->
+        <template v-if="academy.mode === 'ai-assisted'">
+          <!-- Drag handle -->
+          <div
+            class="group relative shrink-0 w-[5px] cursor-col-resize"
+            @mousedown="startResize"
+          >
+            <div
+              class="absolute inset-0 transition-colors"
+              :class="isResizing ? 'bg-indigo-500/50' : 'bg-[var(--border)] group-hover:bg-indigo-500/35'"
+            />
+          </div>
+
+          <!-- Chat panel -->
+          <div
+            class="shrink-0 flex flex-col overflow-hidden transition-[height] duration-200"
+            :style="chatPanelStyle"
+          >
+            <AIProfessorChat
+              :lesson="currentLesson"
+              :lesson-completed="academy.isCompleted(currentLesson.id)"
+              :terminal-visible="labTerminalVisible"
+              @mark-complete="markComplete"
+              @mermaid-diagram="onMermaidDiagram"
+              @whiteboard-diagrams="syncWhiteboardDiagrams"
+              @toggle-terminal="toggleLabTerminal"
+              @open-terminal="openLabTerminal"
+            />
+          </div>
+        </template>
       </div>
     </template>
 
@@ -1181,6 +1604,174 @@ async function resetAcademy() {
       </div>
     </GlassModal>
 
+    <!-- ── BULK TTS MODAL ───────────────────────────────────────────────── -->
+    <GlassModal v-model="showBulkTTSModal" title="Audio Narration" max-width="lg">
+      <div class="space-y-4 p-1">
+        <!-- Running progress bar -->
+        <div v-if="bulkRunning" class="rounded-lg border border-teal-500/20 bg-teal-500/[0.06] p-3">
+          <div class="flex items-center justify-between gap-2">
+            <div class="flex min-w-0 items-center gap-2">
+              <Loader2 class="size-3.5 shrink-0 animate-spin text-teal-300" />
+              <p class="truncate text-xs text-teal-300">
+                {{ bulkIdx + 1 }}/{{ bulkQueue.length }}
+                <span v-if="bulkCurrentLesson"> — {{ tts.progressByLessonId.value[bulkCurrentLesson.id] || bulkCurrentLesson.title }}</span>
+              </p>
+            </div>
+            <span class="shrink-0 text-[10px] text-teal-300/70">{{ tts.cachedLessonIds.value.size }} cached</span>
+          </div>
+          <div class="mt-2 h-1 rounded-full bg-white/[0.08]">
+            <div
+              class="h-1 rounded-full bg-teal-400 transition-all duration-500"
+              :style="{ width: `${Math.round(((bulkIdx) / bulkQueue.length) * 100)}%` }"
+            />
+          </div>
+        </div>
+
+        <!-- Info notice (idle) -->
+        <div v-else class="flex items-start gap-2.5 rounded-lg border border-amber-500/20 bg-amber-500/[0.06] px-3 py-2.5">
+          <Clock class="mt-0.5 size-3.5 shrink-0 text-amber-400" />
+          <p class="text-[11px] leading-relaxed text-[var(--text-muted)]">
+            First lesson may take 5–15 min while Kokoro loads into memory. Subsequent narrations generate faster. Audio is cached locally and persists across sessions.
+          </p>
+        </div>
+
+        <!-- Model picker -->
+        <div class="space-y-1.5">
+          <p class="text-[10px] font-semibold uppercase tracking-widest text-[var(--text-faint)]">Script generated by</p>
+          <div class="flex gap-2">
+            <button
+              v-for="opt in ttsModelOptions"
+              :key="opt.id"
+              class="flex-1 rounded-lg border px-2.5 py-2 text-xs transition-all"
+              :class="bulkTTSModel === opt.id
+                ? 'border-teal-500/30 bg-teal-500/10 text-teal-200'
+                : 'border-[var(--border)] text-[var(--text-faint)] hover:border-teal-500/20 hover:text-[var(--text-muted)]'"
+              :disabled="bulkRunning"
+              @click="bulkTTSModel = opt.id"
+            >
+              {{ opt.label }}
+            </button>
+          </div>
+        </div>
+
+        <!-- Lesson list header -->
+        <div class="flex items-center justify-between">
+          <p class="text-[10px] font-semibold uppercase tracking-widest text-[var(--text-faint)]">
+            Lessons — <span class="text-teal-300">{{ bulkQueue.length }} selected</span>
+          </p>
+          <div class="flex items-center gap-3">
+            <button
+              class="text-[10px] text-[var(--text-faint)] transition-colors hover:text-[var(--text-muted)]"
+              :disabled="bulkRunning"
+              @click="bulkQueue = []"
+            >
+              Clear
+            </button>
+            <button
+              class="text-[10px] text-teal-400 transition-colors hover:text-teal-300"
+              :disabled="bulkRunning"
+              @click="bulkQueue = LESSONS.filter(l => !tts.cachedLessonIds.value.has(l.id) && !tts.generatingLessonIds.value.has(l.id)).map(l => l.id)"
+            >
+              Select all uncached
+            </button>
+          </div>
+        </div>
+
+        <!-- Scrollable lesson list grouped by week -->
+        <div class="max-h-64 space-y-3 overflow-y-auto custom-scroll">
+          <template v-for="week in WEEKS" :key="week.number">
+            <div class="space-y-0.5">
+              <p class="mb-1 text-[10px] font-bold uppercase tracking-widest" :class="week.color">
+                {{ week.title }} — {{ week.theme }}
+              </p>
+              <button
+                v-for="lesson in LESSONS.filter(l => l.week === week.number)"
+                :key="lesson.id"
+                class="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-white/[0.04] disabled:cursor-not-allowed disabled:opacity-60"
+                :disabled="bulkRunning || tts.generatingLessonIds.value.has(lesson.id)"
+                @click="toggleBulkLesson(lesson.id)"
+              >
+                <div
+                  class="flex size-3.5 shrink-0 items-center justify-center rounded border transition-all"
+                  :class="bulkQueue.includes(lesson.id)
+                    ? 'border-teal-500 bg-teal-500'
+                    : 'border-white/20 bg-transparent'"
+                >
+                  <svg v-if="bulkQueue.includes(lesson.id)" class="size-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <span class="min-w-0 flex-1 truncate text-[11px] text-[var(--text-muted)]">{{ lesson.title }}</span>
+                <span v-if="tts.cachedLessonIds.value.has(lesson.id)" class="shrink-0 text-[9px] text-teal-400">ready</span>
+                <span v-else-if="tts.generatingLessonIds.value.has(lesson.id)" class="flex shrink-0 items-center gap-1 text-[9px] text-teal-300/80">
+                  <Loader2 class="size-2.5 animate-spin" />
+                  {{ (tts.progressByLessonId.value[lesson.id] || '').slice(0, 16) || 'creating...' }}
+                </span>
+              </button>
+            </div>
+          </template>
+        </div>
+
+        <!-- Actions -->
+        <div class="flex gap-2 border-t border-[var(--border)] pt-3">
+          <template v-if="!bulkRunning">
+            <GlassButton
+              class="flex-1"
+              :disabled="bulkQueue.length === 0"
+              @click="startBulkTTS"
+            >
+              <Headphones class="size-3.5" />
+              Generate ({{ bulkQueue.length }})
+            </GlassButton>
+            <GlassButton variant="ghost" @click="showBulkTTSModal = false">Cancel</GlassButton>
+          </template>
+          <template v-else>
+            <GlassButton class="flex-1" variant="ghost" @click="stopBulkTTS">
+              Stop Queue
+            </GlassButton>
+            <GlassButton variant="ghost" @click="showBulkTTSModal = false">
+              Close (keep running)
+            </GlassButton>
+          </template>
+        </div>
+      </div>
+    </GlassModal>
+
+    <!-- ── TTS SUGGESTION MODAL ──────────────────────────────────────────── -->
+    <GlassModal v-model="showTTSSuggestionModal" title="Enhance Your Learning" max-width="sm">
+      <div class="space-y-4 p-1">
+        <div class="flex items-start gap-3">
+          <div class="grid size-10 shrink-0 place-items-center rounded-xl border border-teal-500/20 bg-teal-500/10">
+            <Headphones class="size-5 text-teal-300" />
+          </div>
+          <div>
+            <p class="text-sm font-semibold text-[var(--text)]">Listen while you learn</p>
+            <p class="mt-1 text-xs leading-relaxed text-[var(--text-muted)]">
+              Generate spoken audio narrations for your lessons using Kokoro TTS. Each lesson gets a calm, educational summary you can listen to while studying.
+            </p>
+          </div>
+        </div>
+
+        <div class="flex flex-col gap-2 pt-1">
+          <GlassButton
+            class="w-full"
+            @click="showTTSSuggestionModal = false; openBulkTTSModal()"
+          >
+            <Headphones class="size-3.5" />
+            Generate Audio Narrations
+          </GlassButton>
+          <div class="flex gap-2">
+            <GlassButton class="flex-1" variant="ghost" @click="dismissTTSSuggestion(false)">
+              Maybe Later
+            </GlassButton>
+            <GlassButton class="flex-1" variant="ghost" @click="dismissTTSSuggestion(true)">
+              Don't Show Again
+            </GlassButton>
+          </div>
+        </div>
+      </div>
+    </GlassModal>
+
     <GlassModal v-model="showTTSModal" title="Create Narration" max-width="sm">
       <div class="space-y-4 p-1">
         <!-- Timing notice -->
@@ -1258,13 +1849,13 @@ async function resetAcademy() {
 .academy-lesson-card::before {
   content: '';
   position: absolute;
-  inset: -1px;
+  inset: 0;
   z-index: 1;
   border-radius: inherit;
-  background: linear-gradient(120deg, transparent 12%, rgba(var(--lesson-shine), 0.55), transparent 44%);
+  background: linear-gradient(120deg, transparent 10%, rgba(var(--lesson-shine), 0.5) 30%, rgba(var(--lesson-shine), 0.3) 55%, transparent 75%);
   opacity: 0;
-  transform: translateX(-35%);
-  transition: opacity 180ms ease, transform 500ms ease;
+  transform: translateX(-60%);
+  transition: opacity 180ms ease, transform 550ms ease;
   pointer-events: none;
 }
 
@@ -1298,8 +1889,8 @@ async function resetAcademy() {
 
 .academy-lesson-card.is-open:hover::before,
 .academy-lesson-card.is-current::before {
-  opacity: 0.75;
-  transform: translateX(24%);
+  opacity: 0.8;
+  transform: translateX(60%);
 }
 
 .academy-lesson-card.is-current {

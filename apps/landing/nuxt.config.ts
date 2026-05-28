@@ -7,7 +7,11 @@ export default defineNuxtConfig({
   css: ['~/assets/css/main.css'],
   app: {
     head: {
-      title: 'Vindicta — Local-First Security Workspace',
+      htmlAttrs: {
+        lang: 'en',
+      },
+      title: 'Vindicta - Local-First Security Workspace',
+      titleTemplate: '%s',
       link: [
         { rel: 'icon', href: '/favicon.ico' },
         { rel: 'icon', type: 'image/png', href: '/icon.png' },
@@ -21,18 +25,31 @@ export default defineNuxtConfig({
       ],
       meta: [
         { name: 'viewport', content: 'width=device-width, initial-scale=1' },
+        { name: 'robots', content: 'index, follow' },
+        { name: 'author', content: 'Surelle-ha' },
+        { name: 'application-name', content: 'Vindicta' },
+        { name: 'theme-color', content: '#1e1f22' },
         {
           name: 'description',
           content:
-            'Vindicta is a free local desktop security workspace: AI code review, vulnerability findings, dependency inventory, secret checks, and portable scan history — all on your machine.',
+            'Vindicta is a free local-first desktop security workspace for AI code review, vulnerability tracking, dependency inventory, secret checks, and security learning.',
         },
-        { property: 'og:title', content: 'Vindicta — Local-First Security Workspace' },
+        { property: 'og:site_name', content: 'Vindicta' },
+        { property: 'og:type', content: 'website' },
+        { property: 'og:url', content: 'https://vindicta.surelle.xyz/' },
+        { property: 'og:title', content: 'Vindicta - Local-First Security Workspace' },
         {
           property: 'og:description',
-          content: 'AI security scanning, findings tracking, and dependency checks — offline, on your machine.',
+          content: 'AI security scanning, findings tracking, dependency checks, and security lessons for local codebases.',
         },
-        { property: 'og:image', content: '/icon.png' },
-        { name: 'theme-color', content: '#1e1f22' },
+        { property: 'og:image', content: 'https://vindicta.surelle.xyz/icon.png' },
+        { name: 'twitter:card', content: 'summary_large_image' },
+        { name: 'twitter:title', content: 'Vindicta - Local-First Security Workspace' },
+        {
+          name: 'twitter:description',
+          content: 'Scan codebases, track findings, and learn security from a local-first desktop workspace.',
+        },
+        { name: 'twitter:image', content: 'https://vindicta.surelle.xyz/icon.png' },
       ],
     },
   },

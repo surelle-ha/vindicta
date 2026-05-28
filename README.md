@@ -2,6 +2,23 @@
 
 Vindicta is a local-first security workspace for scanning projects, tracking vulnerability findings, and exporting security review reports. The desktop app stores project state in each project folder, reads the local codebase, and uses the Codex CLI for read-only security analysis.
 
+## Screenshots
+
+<table>
+  <tr>
+    <td><img src="docs/snapshots/0_1_0_001.png" alt="Academy — Security Bootcamp lesson grid" width="400"/><br/><sub><b>Academy</b> — Security Bootcamp with weekly lesson tracks</sub></td>
+    <td><img src="docs/snapshots/0_1_0_002.png" alt="Home dashboard" width="400"/><br/><sub><b>Home</b> — Project overview, quick actions, and start guide</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/snapshots/0_1_0_003.png" alt="MCP Server" width="400"/><br/><sub><b>MCP Server</b> — Expose Vindicta tools to AI agents via Model Context Protocol</sub></td>
+    <td><img src="docs/snapshots/0_1_0_004.png" alt="Security Findings workspace" width="400"/><br/><sub><b>Workspace</b> — Security findings with severity triage and evidence</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/snapshots/0_1_0_005.png" alt="Penetration Testing" width="400"/><br/><sub><b>Pentest</b> — Red Team / Blue Team / Purple Team mode with AI-driven agent</sub></td>
+    <td></td>
+  </tr>
+</table>
+
 ## What It Does
 
 - Registers local projects and keeps per-project state in `vindicta.json`.
@@ -10,7 +27,7 @@ Vindicta is a local-first security workspace for scanning projects, tracking vul
 - Tracks remediation items as first-class security findings.
 - Inspects dependency manifests, likely secret patterns, and security-relevant configuration signals.
 - Exports professional DOCX security review reports.
-- Provides a local Settings contact form that can submit GitHub Issues when a repo-scoped token is configured.
+- Provides a local Settings page for configuring AI tools, WSL profiles, and app preferences.
 
 ## Monorepo Layout
 

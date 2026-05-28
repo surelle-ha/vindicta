@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { INTRO_LESSON_IDS, MAIN_LESSON_COUNT } from '~/data/curriculum'
 
 export type AcademyMode = 'manual' | 'ai-assisted' | null
-export type AcademyAIModel = 'claude' | 'codex' | 'openrouter' | null
+export type AcademyAIModel = 'claude' | 'codex' | 'openrouter' | 'ollama' | null
 
 export interface AcademyChatMessage {
   id: number

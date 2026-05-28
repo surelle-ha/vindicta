@@ -63,6 +63,44 @@ const openRouterStatus = {
   description: 'Unified API gateway for 200+ AI models. Will allow Vindicta to route security scans to any supported model — Mistral, Llama, Gemini, and more.',
 }
 
+const ollamaUrl = ref(app.ollama.url)
+const ollamaModel = ref(app.ollama.model)
+const ollamaChecking = ref(false)
+const ollamaError = ref('')
+const ollamaOk = ref(false)
+const ollamaAvailableModels = ref<string[]>([])
+
+async function saveOllama() {
+  await app.setOllama({
+    url: ollamaUrl.value.trim() || 'http://localhost:11434',
+    model: ollamaModel.value.trim() || 'llama3.2',
+  })
+  notify('Ollama settings saved.', 'success')
+}
+
+async function checkOllama() {
+  ollamaChecking.value = true
+  ollamaError.value = ''
+  ollamaOk.value = false
+  ollamaAvailableModels.value = []
+  try {
+    await saveOllama()
+    const base = (ollamaUrl.value.trim() || 'http://localhost:11434').replace(/\/$/, '')
+    const response = await fetch(`${base}/api/tags`)
+    if (!response.ok) throw new Error(`Ollama returned HTTP ${response.status}`)
+    const data = await response.json()
+    ollamaAvailableModels.value = (data?.models ?? []).map((m: any) => m?.name ?? '').filter(Boolean)
+    ollamaOk.value = true
+    notify('Ollama connection verified.', 'success')
+  }
+  catch (e: any) {
+    ollamaError.value = e?.message ?? 'Could not reach Ollama. Make sure it is running.'
+  }
+  finally {
+    ollamaChecking.value = false
+  }
+}
+
 const openRouterEnabled = ref(app.openRouter.enabled)
 const openRouterApiKey = ref(app.openRouter.apiKey)
 const openRouterModel = ref(app.openRouter.model)
@@ -219,6 +257,35 @@ async function checkKokoroCache() {
   }
 }
 
+/**
+ * Download a single URL via the Rust `download_to_temp` command (uses reqwest —
+ * completely bypasses WebView CSP / WebView2 network restrictions), then reads
+ * the temp file with the Tauri fs plugin and stores the bytes in the given
+ * Browser Cache under the original URL key.
+ */
+async function downloadAndCache(cacheStore: Cache, url: string): Promise<void> {
+  const { invoke } = await import('@tauri-apps/api/core')
+  const { readFile, remove } = await import('@tauri-apps/plugin-fs')
+
+  // Download via Rust — returns absolute path of temp file
+  const tmpPath = await invoke<string>('download_to_temp', { url })
+
+  try {
+    // Read binary from temp file
+    const bytes = await readFile(tmpPath)
+    // Wrap in a synthetic Response that the Cache API will accept
+    const response = new Response(new Uint8Array(bytes), {
+      status: 200,
+      headers: { 'Content-Type': 'application/octet-stream' },
+    })
+    await cacheStore.put(url, response)
+  }
+  finally {
+    // Always clean up temp file, even on cache write failure
+    try { await remove(tmpPath) } catch { /* best effort */ }
+  }
+}
+
 async function downloadKokoro() {
   if (typeof caches === 'undefined') {
     notify('Browser Cache API is not available in this context.', 'error')
@@ -232,15 +299,15 @@ async function downloadKokoro() {
     const tc = await caches.open('transformers-cache')
     const vc = await caches.open('kokoro-voices')
 
-    // Core model files (sequential — model_quantized.onnx is ~82 MB)
+    // Core model files — sequential because model_quantized.onnx is ~82 MB
     for (const file of kokoroCoreFiles.value) {
       const url = `${KOKORO_HF_BASE}/${file.path}`
       kokoroDownloadMsg.value = `Downloading ${file.label}…`
       if (!(await tc.match(url))) {
-        const res = await fetch(url)
-        if (res.ok) { await tc.put(url, res); file.cached = true }
-        else { console.warn(`[Kokoro] Failed to fetch ${file.label}: HTTP ${res.status}`) }
-      } else {
+        await downloadAndCache(tc, url)
+        file.cached = true
+      }
+      else {
         file.cached = true
       }
       kokoroDownloadDone.value++
@@ -251,11 +318,10 @@ async function downloadKokoro() {
     for (let i = 0; i < KOKORO_VOICE_IDS.length; i += BATCH) {
       const batch = KOKORO_VOICE_IDS.slice(i, i + BATCH)
       kokoroDownloadMsg.value = `Downloading voices (${Math.min(i + BATCH, KOKORO_VOICE_IDS.length)}/${KOKORO_VOICE_IDS.length})…`
-      await Promise.all(batch.map(async id => {
+      await Promise.all(batch.map(async (id) => {
         const url = `${KOKORO_HF_BASE}/voices/${id}.bin`
         if (!(await vc.match(url))) {
-          const res = await fetch(url)
-          if (res.ok) await vc.put(url, res)
+          await downloadAndCache(vc, url)
         }
         kokoroDownloadDone.value++
       }))
@@ -264,10 +330,12 @@ async function downloadKokoro() {
     kokoroDownloadMsg.value = ''
     notify('Kokoro TTS files downloaded successfully.', 'success')
     await checkKokoroCache()
-  } catch (e: any) {
+  }
+  catch (e: any) {
     kokoroDownloadMsg.value = ''
-    notify(`Kokoro download failed: ${e?.message ?? e}`, 'error')
-  } finally {
+    notify(`Kokoro download failed: ${e?.message ?? String(e)}`, 'error')
+  }
+  finally {
     kokoroDownloading.value = false
   }
 }
@@ -429,6 +497,73 @@ onMounted(() => {
                 Verify
               </GlassButton>
             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Ollama -->
+    <div class="rounded-xl border border-orange-500/20 bg-[var(--bg-card)] p-5">
+      <div class="flex items-start gap-4">
+        <div class="grid size-10 shrink-0 place-items-center rounded-xl border border-orange-500/20 bg-orange-500/10">
+          <Bot class="size-5 text-orange-300" />
+        </div>
+        <div class="flex-1 min-w-0 space-y-4">
+          <div class="flex items-center gap-2 flex-wrap">
+            <p class="text-sm font-semibold text-[var(--text)]">Ollama</p>
+            <span class="text-[10px] text-[var(--text-faint)]">Local AI Server</span>
+            <span
+              class="ml-auto rounded-full border px-2 py-0.5 text-[10px] font-semibold"
+              :class="ollamaOk
+                ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
+                : ollamaUrl
+                  ? 'border-orange-500/20 bg-orange-500/10 text-orange-300'
+                  : 'border-[var(--border)] bg-white/[0.04] text-[var(--text-faint)]'"
+            >
+              {{ ollamaOk ? 'Connected' : ollamaUrl ? 'Configured' : 'Not set' }}
+            </span>
+          </div>
+          <p class="text-xs leading-relaxed text-[var(--text-muted)]">
+            Run open-source LLMs locally via Ollama. Powers the Academy professor and AI security scans without sending data to external APIs. Requires Ollama running on your machine.
+          </p>
+
+          <div class="grid gap-3 sm:grid-cols-2">
+            <GlassInput v-model="ollamaUrl" label="Server URL" placeholder="http://localhost:11434" />
+            <GlassInput v-model="ollamaModel" label="Model" placeholder="llama3.2" />
+          </div>
+
+          <div v-if="ollamaAvailableModels.length" class="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.04] px-3 py-2">
+            <p class="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-emerald-300/70">Available models</p>
+            <div class="flex flex-wrap gap-1.5">
+              <button
+                v-for="m in ollamaAvailableModels"
+                :key="m"
+                class="rounded border px-2 py-0.5 text-[10px] transition-colors"
+                :class="ollamaModel === m
+                  ? 'border-orange-500/40 bg-orange-500/15 text-orange-200'
+                  : 'border-[var(--border)] text-[var(--text-muted)] hover:border-orange-500/25 hover:text-orange-300'"
+                @click="ollamaModel = m"
+              >
+                {{ m }}
+              </button>
+            </div>
+          </div>
+
+          <div v-if="ollamaError" class="flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/[0.06] px-3 py-2">
+            <AlertTriangle class="size-3.5 text-amber-400 mt-0.5 shrink-0" />
+            <p class="text-xs text-amber-200">{{ ollamaError }}</p>
+          </div>
+
+          <div class="flex flex-wrap gap-2">
+            <GlassButton size="sm" variant="ghost" @click="saveOllama">
+              <Save class="size-3.5" />
+              Save
+            </GlassButton>
+            <GlassButton size="sm" :disabled="ollamaChecking" @click="checkOllama">
+              <Loader2 v-if="ollamaChecking" class="size-3.5 animate-spin" />
+              <RefreshCw v-else class="size-3.5" />
+              Test Connection
+            </GlassButton>
           </div>
         </div>
       </div>

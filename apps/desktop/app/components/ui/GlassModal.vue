@@ -32,7 +32,7 @@ function close() {
     >
       <div
         v-if="model"
-        class="fixed inset-0 z-[200] flex items-center justify-center p-3 sm:p-4"
+        class="fixed inset-x-0 bottom-0 top-8 z-[200] flex items-center justify-center p-3 sm:p-4"
       >
         <!-- Backdrop -->
         <div
@@ -48,7 +48,7 @@ function close() {
         >
           <div
             v-if="model"
-            class="relative glass flex max-h-[calc(100dvh-1.5rem)] w-full flex-col overflow-hidden sm:max-h-[calc(100dvh-2rem)]"
+            class="relative glass flex max-h-[calc(100dvh-3.5rem)] w-full flex-col overflow-hidden sm:max-h-[calc(100dvh-4rem)]"
             :class="[
               maxWidth === 'sm' ? 'max-w-sm' :
               maxWidth === 'lg' ? 'max-w-2xl' :
