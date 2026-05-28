@@ -291,9 +291,9 @@ export const useSecurityStore = defineStore('security', {
     shouldAutoScan() {
       if (!this.data.settings.autoScanEnabled) return false
       const latest = this.latestScan
-      if (!latest) return true
+      if (!latest) return false
       const scannedAt = new Date(latest.scannedAt).getTime()
-      if (!Number.isFinite(scannedAt)) return true
+      if (!Number.isFinite(scannedAt)) return false
       return Date.now() - scannedAt > this.data.settings.autoScanStaleHours * 60 * 60 * 1000
     },
 

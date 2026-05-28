@@ -24,6 +24,11 @@ export interface OpenRouterSettings {
   model: string
 }
 
+export interface OllamaSettings {
+  url: string
+  model: string
+}
+
 export interface WslProfile {
   id: string
   name: string
@@ -47,6 +52,7 @@ interface AppSettings {
   smtp: SmtpSettings
   contact: ContactSettings
   openRouter: OpenRouterSettings
+  ollama: OllamaSettings
   wslProfiles: WslProfile[]
   rssSources: RssSource[]
   featuresModalDismissed: boolean
@@ -74,6 +80,11 @@ const DEFAULT_OPENROUTER: OpenRouterSettings = {
   enabled: false,
   apiKey: '',
   model: 'openai/gpt-4.1-mini',
+}
+
+const DEFAULT_OLLAMA: OllamaSettings = {
+  url: 'http://localhost:11434',
+  model: 'llama3.2',
 }
 
 export const DEFAULT_WSL_PROFILES: WslProfile[] = [
@@ -125,6 +136,7 @@ export const useAppStore = defineStore('app', {
     smtp: { ...DEFAULT_SMTP },
     contact: { ...DEFAULT_CONTACT },
     openRouter: { ...DEFAULT_OPENROUTER },
+    ollama: { ...DEFAULT_OLLAMA },
     wslProfiles: DEFAULT_WSL_PROFILES.map(profile => ({ ...profile })),
     rssSources: DEFAULT_RSS_SOURCES.map(source => ({ ...source })),
     featuresModalDismissed: false,
@@ -145,6 +157,7 @@ export const useAppStore = defineStore('app', {
           this.smtp = { ...DEFAULT_SMTP, ...(saved.smtp ?? {}) }
           this.contact = { ...DEFAULT_CONTACT, ...(saved.contact ?? {}) }
           this.openRouter = { ...DEFAULT_OPENROUTER, ...(saved.openRouter ?? {}) }
+          this.ollama = { ...DEFAULT_OLLAMA, ...(saved.ollama ?? {}) }
           this.wslProfiles = normalizeWslProfiles(saved.wslProfiles)
           this.rssSources = normalizeRssSources(saved.rssSources)
           this.featuresModalDismissed = saved.featuresModalDismissed ?? false
@@ -163,6 +176,7 @@ export const useAppStore = defineStore('app', {
             this.smtp = { ...DEFAULT_SMTP, ...(saved.smtp ?? {}) }
             this.contact = { ...DEFAULT_CONTACT, ...(saved.contact ?? {}) }
             this.openRouter = { ...DEFAULT_OPENROUTER, ...(saved.openRouter ?? {}) }
+            this.ollama = { ...DEFAULT_OLLAMA, ...(saved.ollama ?? {}) }
             this.wslProfiles = normalizeWslProfiles(saved.wslProfiles)
             this.rssSources = normalizeRssSources(saved.rssSources)
             this.featuresModalDismissed = saved.featuresModalDismissed ?? false
@@ -206,6 +220,11 @@ export const useAppStore = defineStore('app', {
 
     async setOpenRouter(settings: Partial<OpenRouterSettings>) {
       this.openRouter = { ...this.openRouter, ...settings }
+      await this._persist()
+    },
+
+    async setOllama(settings: Partial<OllamaSettings>) {
+      this.ollama = { ...this.ollama, ...settings }
       await this._persist()
     },
 
@@ -253,6 +272,7 @@ export const useAppStore = defineStore('app', {
         smtp: this.smtp,
         contact: this.contact,
         openRouter: this.openRouter,
+        ollama: this.ollama,
         wslProfiles: this.wslProfiles,
         rssSources: this.rssSources,
         featuresModalDismissed: this.featuresModalDismissed,

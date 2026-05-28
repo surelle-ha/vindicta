@@ -28,6 +28,7 @@ import {
 import { runCodexExec } from '~/composables/useCodexShell'
 import { runClaudeExec } from '~/composables/useClaudeAI'
 import { runOpenRouterChat } from '~/composables/useOpenRouterAI'
+import { runOllamaChat } from '~/composables/useOllamaAI'
 import type {
   ProjectMeta,
   SecurityFinding,
@@ -39,7 +40,7 @@ import type {
 } from '~/types/vindicta'
 import { createVindictaSecurityDocx } from '~/utils/docx'
 
-type SecurityAITool = 'codex' | 'claude' | 'openrouter'
+type SecurityAITool = 'codex' | 'claude' | 'openrouter' | 'ollama'
 type SecurityWorkspaceTab = 'overview' | 'scanner' | 'findings' | 'dependencies' | 'secrets' | 'reports' | 'history' | 'settings'
 type ScanActivityStatus = 'pending' | 'running' | 'done' | 'warning' | 'error'
 
@@ -118,24 +119,27 @@ let autoScanStartedForProject: string | null = null
 function securityToolLabel(tool: SecurityAITool) {
   if (tool === 'claude') return 'Claude'
   if (tool === 'openrouter') return 'OpenRouter'
+  if (tool === 'ollama') return 'Ollama'
   return 'Codex'
 }
 
 function securityToolAccentClass(tool: SecurityAITool) {
   if (tool === 'claude') return 'text-violet-300'
   if (tool === 'openrouter') return 'text-sky-300'
+  if (tool === 'ollama') return 'text-orange-300'
   return 'text-emerald-300'
 }
 
 function securityToolRunButtonClass(tool: SecurityAITool) {
   if (tool === 'claude') return 'bg-violet-600 hover:bg-violet-500'
   if (tool === 'openrouter') return 'bg-sky-600 hover:bg-sky-500'
+  if (tool === 'ollama') return 'bg-orange-600 hover:bg-orange-500'
   return 'bg-emerald-600 hover:bg-emerald-500'
 }
 
 function buildScanStageTemplates(tool: SecurityAITool) {
   const toolLabel = securityToolLabel(tool)
-  const launchDetail = tool === 'openrouter'
+  const launchDetail = (tool === 'openrouter' || tool === 'ollama')
     ? `Sending the read-only security prompt to the configured ${toolLabel} model.`
     : `Launching ${toolLabel} CLI in read-only mode for the selected project.`
   return [
@@ -199,7 +203,11 @@ const statusOptions: SecurityFindingStatus[] = ['open', 'triaged', 'in_progress'
 const selectedEffortOption = computed(() => scanEffortOptions.find(option => option.value === selectedScanEffort.value) ?? scanEffortOptions[1]!)
 const normalizedFindingLimit = computed(() => Math.max(0, Math.min(50, Math.floor(Number(selectedFindingLimit.value) || 0))))
 const selectedAIToolLabel = computed(() => securityToolLabel(selectedAITool.value))
-const canUseSelectedAITool = computed(() => selectedAITool.value !== 'openrouter' || (app.openRouter.enabled && Boolean(app.openRouter.apiKey.trim())))
+const canUseSelectedAITool = computed(() => {
+  if (selectedAITool.value === 'openrouter') return app.openRouter.enabled && Boolean(app.openRouter.apiKey.trim())
+  if (selectedAITool.value === 'ollama') return Boolean(app.ollama.url.trim())
+  return true
+})
 const latestScan = computed(() => security.latestScan)
 const activeScan = computed(() => security.scans.find(scan => scan.id === activeScanId.value) ?? latestScan.value)
 const scanFindings = computed(() => activeScan.value?.findings ?? [])
@@ -598,6 +606,12 @@ async function runAIScan(effortOverride?: SecurityScanEffort, automatic = false)
     return
   }
 
+  if (tool === 'ollama' && !app.ollama.url.trim()) {
+    notify('Configure Ollama URL in AI Models before running this scan.', 'warning')
+    showToolPicker.value = true
+    return
+  }
+
   if (!automatic) {
     selectedFindingLimit.value = findingLimit
     await security.updateSettings({ aiFindingLimit: findingLimit })
@@ -617,6 +631,20 @@ async function runAIScan(effortOverride?: SecurityScanEffort, automatic = false)
       const output = await runOpenRouterChat({
         apiKey: app.openRouter.apiKey,
         model: app.openRouter.model,
+        messages: [
+          {
+            role: 'system',
+            content: 'You are Vindicta, an AI security reviewer. Return only the JSON requested by the user.',
+          },
+          { role: 'user', content: prompt },
+        ],
+      })
+      result = { stdout: output, stderr: '' }
+    }
+    else if (tool === 'ollama') {
+      const output = await runOllamaChat({
+        url: app.ollama.url,
+        model: app.ollama.model,
         messages: [
           {
             role: 'system',
@@ -1071,7 +1099,7 @@ async function scanConfig() {
     {
       label: 'Automatic scan',
       status: security.settings.autoScanEnabled ? 'ok' : 'warning',
-      detail: security.settings.autoScanEnabled ? `Quick scans run when security data is older than ${security.settings.autoScanStaleHours} hours.` : 'Automatic scans are disabled for this project.',
+      detail: security.settings.autoScanEnabled ? `Existing scan history refreshes when older than ${security.settings.autoScanStaleHours} hours. New projects wait for a manual scan.` : 'Automatic scans are disabled for this project.',
     },
   ]
   configChecks.value = checks
@@ -1487,7 +1515,7 @@ async function clearScanHistory() {
             >
               <Check class="size-3" stroke-width="3" />
             </span>
-            Run quick scan when stale
+            Refresh existing scans when stale
           </button>
         </div>
         <label class="rounded-lg border border-[var(--border)] bg-black/10 p-4">
@@ -1598,6 +1626,16 @@ async function clearScanHistory() {
               <p class="mt-0.5 text-xs text-[var(--text-muted)]">Runs this review with the configured OpenRouter API model.</p>
               <p class="mt-1 text-[10px]" :class="app.openRouter.enabled && app.openRouter.apiKey ? 'text-sky-300' : 'text-amber-300'">
                 {{ app.openRouter.enabled && app.openRouter.apiKey ? app.openRouter.model : 'Configure API key in AI Models' }}
+              </p>
+            </div>
+          </button>
+          <button class="flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left transition-colors" :class="selectedAITool === 'ollama' ? 'border-orange-500/30 bg-orange-500/10' : 'border-[var(--border)] bg-black/10 hover:bg-white/[0.05]'" @click="selectedAITool = 'ollama'">
+            <div class="grid size-9 place-items-center rounded-lg border border-orange-500/30 bg-orange-500/15 text-sm font-semibold text-orange-200">Ol</div>
+            <div class="min-w-0">
+              <p class="text-sm font-semibold text-[var(--text)]">Ollama</p>
+              <p class="mt-0.5 text-xs text-[var(--text-muted)]">Runs this review with a local Ollama model. No data leaves your machine.</p>
+              <p class="mt-1 text-[10px]" :class="app.ollama.url ? 'text-orange-300' : 'text-amber-300'">
+                {{ app.ollama.url ? `${app.ollama.model} · ${app.ollama.url}` : 'Configure Ollama URL in AI Models' }}
               </p>
             </div>
           </button>
