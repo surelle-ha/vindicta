@@ -507,6 +507,72 @@ async function installCodexCli() {
   }
 }
 
+async function checkClaudeHealth(): Promise<DoctorCheck> {
+  try {
+    const commandName = isWindowsRuntime() ? 'claude-cmd-version' : 'claude-version-check'
+    const result = await runShellCommand([commandName, 'claude-version-check'], ['--version'])
+    if (result.code !== 0) {
+      return { id: 'claude', label: 'Claude Code', detail: firstLine(result.stderr) || 'Claude Code CLI did not respond to the version check.', status: 'error', fixable: false }
+    }
+    return { id: 'claude', label: 'Claude Code', detail: `Claude Code CLI ${firstLine(result.stdout)} is available.`, status: 'ok', fixable: false }
+  }
+  catch {
+    return { id: 'claude', label: 'Claude Code', detail: 'Claude Code CLI is not available. Download it from claude.ai/download.', status: 'error', fixable: false }
+  }
+}
+
+async function checkOpenRouterHealth(): Promise<DoctorCheck> {
+  if (!app.openRouter.apiKey) {
+    return { id: 'openrouter', label: 'OpenRouter', detail: 'API key not configured. Add your key in AI Models settings.', status: 'warning', fixable: false }
+  }
+  try {
+    const res = await fetch('https://openrouter.ai/api/v1/models', {
+      headers: { Authorization: `Bearer ${app.openRouter.apiKey}` },
+    })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const model = app.openRouter.model || 'no model selected'
+    return { id: 'openrouter', label: 'OpenRouter', detail: `Connected. Active model: ${model}.`, status: 'ok', fixable: false }
+  }
+  catch (e: any) {
+    return { id: 'openrouter', label: 'OpenRouter', detail: `Could not reach OpenRouter API: ${e?.message ?? 'unknown error'}.`, status: 'error', fixable: false }
+  }
+}
+
+async function checkOllamaHealth(): Promise<DoctorCheck> {
+  if (!app.ollama.url) {
+    return { id: 'ollama', label: 'Ollama', detail: 'Server URL not configured. Add it in AI Models settings.', status: 'warning', fixable: false }
+  }
+  try {
+    const base = app.ollama.url.replace(/\/$/, '')
+    const res = await fetch(`${base}/api/tags`)
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const data = await res.json() as { models?: { name: string }[] }
+    const count = data?.models?.length ?? 0
+    return { id: 'ollama', label: 'Ollama', detail: `Connected to ${base}. ${count} model${count !== 1 ? 's' : ''} available.`, status: 'ok', fixable: false }
+  }
+  catch (e: any) {
+    return { id: 'ollama', label: 'Ollama', detail: `Could not reach Ollama at ${app.ollama.url}: ${e?.message ?? 'unknown error'}.`, status: 'error', fixable: false }
+  }
+}
+
+async function checkKokoroHealth(): Promise<DoctorCheck> {
+  try {
+    if (typeof caches === 'undefined') {
+      return { id: 'kokoro', label: 'Kokoro TTS', detail: 'Cache API unavailable. Kokoro TTS requires a Chromium-based runtime.', status: 'error', fixable: false }
+    }
+    const cache = await caches.open('transformers-cache')
+    const configKey = 'https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX/resolve/main/config.json'
+    const hit = await cache.match(configKey)
+    if (hit) {
+      return { id: 'kokoro', label: 'Kokoro TTS', detail: 'Kokoro ONNX model is downloaded and ready for audio narration.', status: 'ok', fixable: false }
+    }
+    return { id: 'kokoro', label: 'Kokoro TTS', detail: 'Kokoro model not yet downloaded. Open AI Models and download the Kokoro engine to enable TTS.', status: 'warning', fixable: false }
+  }
+  catch {
+    return { id: 'kokoro', label: 'Kokoro TTS', detail: 'Could not check Kokoro model status.', status: 'warning', fixable: false }
+  }
+}
+
 async function runDoctor() {
   doctorRunning.value = true
 
@@ -530,6 +596,10 @@ async function runDoctor() {
 
     checks.push(await checkNpmHealth())
     checks.push(await checkCodexHealth())
+    checks.push(await checkClaudeHealth())
+    checks.push(await checkOpenRouterHealth())
+    checks.push(await checkOllamaHealth())
+    checks.push(await checkKokoroHealth())
   }
   finally {
     doctorChecks.value = checks
@@ -1119,10 +1189,9 @@ onMounted(() => {
                 ? 'border-amber-500/20 bg-amber-500/5'
                 : 'border-red-500/20 bg-red-500/5'"
           >
-            <Terminal v-if="check.id === 'codex' || check.id === 'npm'" class="size-3.5 mt-0.5 shrink-0" :class="check.status === 'ok' ? 'text-emerald-400' : check.status === 'warning' ? 'text-amber-400' : 'text-red-400'" />
-            <CheckCircle2 v-else-if="check.status === 'ok'" class="size-3.5 text-emerald-400 mt-0.5 shrink-0" />
-            <AlertTriangle v-else-if="check.status === 'warning'" class="size-3.5 text-amber-400 mt-0.5 shrink-0" />
-            <XCircle v-else class="size-3.5 text-red-400 mt-0.5 shrink-0" />
+            <CheckCircle2 v-if="check.status === 'ok'" class="size-3.5 mt-0.5 shrink-0 text-emerald-400" />
+            <AlertTriangle v-else-if="check.status === 'warning'" class="size-3.5 mt-0.5 shrink-0 text-amber-400" />
+            <XCircle v-else class="size-3.5 mt-0.5 shrink-0 text-red-400" />
             <div class="min-w-0 flex-1">
               <p class="text-xs font-medium text-[var(--text)]">{{ check.label }}</p>
               <p class="text-xs text-[var(--text-muted)] mt-0.5 break-words">{{ check.detail }}</p>

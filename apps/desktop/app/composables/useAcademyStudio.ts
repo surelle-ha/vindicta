@@ -14,6 +14,7 @@ export interface VAFile {
   manifest: {
     id: string
     title: string
+    subtitle: string
     week: number
     day: number
     section: string
@@ -69,6 +70,7 @@ function vaFileToCustomLesson(va: VAFile, vaFilename: string): CustomLesson {
     day: va.manifest.day,
     week: va.manifest.week,
     title: va.manifest.title,
+    subtitle: va.manifest.subtitle || '',
     duration: va.manifest.duration,
     objectives: va.manifest.objectives,
     content: va.content,
@@ -224,6 +226,7 @@ function lessonToVAFile(lesson: CustomLesson): VAFile {
     manifest: {
       id: lesson.id,
       title: lesson.title,
+      subtitle: lesson.subtitle || '',
       week: lesson.week,
       day: lesson.day,
       section: lesson.section,
@@ -248,6 +251,7 @@ function createBlankLesson(existingCount: number, section = ''): CustomLesson {
     day: existingCount + 1,
     week: 99,
     title: '',
+    subtitle: '',
     duration: '30 min',
     objectives: [''],
     content: '# Lesson Title\n\nWrite your lesson content here.',

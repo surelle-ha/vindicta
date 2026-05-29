@@ -1078,12 +1078,6 @@ async function resetAcademy() {
                   <ChevronRight class="size-4" />
                 </button>
                 <button
-                  class="inline-flex items-center gap-2 rounded-xl border border-[var(--border)] bg-white/[0.04] px-4 py-2.5 text-sm text-[var(--text-muted)] transition-colors hover:bg-white/[0.07] hover:text-[var(--text)]"
-                  @click="clearFilters"
-                >
-                  View Full Path
-                </button>
-                <button
                   v-if="academy.allCompleted && academy.certificateIssuedAt"
                   class="inline-flex items-center gap-2 rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-2.5 text-sm font-semibold text-amber-200 transition-colors hover:bg-amber-500/15"
                   @click="view = 'certificate'"
@@ -1326,6 +1320,7 @@ async function resetAcademy() {
                   </div>
                   <div>
                     <p class="text-[11px] font-semibold leading-tight text-[var(--text)]">{{ lesson.title }}</p>
+                    <p v-if="lesson.subtitle" class="text-[10px] leading-snug text-[var(--text-faint)] mt-0.5 line-clamp-2">{{ lesson.subtitle }}</p>
                     <div class="mt-1 flex items-center gap-1.5 text-[10px] text-[var(--text-faint)]">
                       <Clock class="size-2.5" />
                       <span>{{ lesson.duration }}</span>

@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import {
-  BookOpen, Plus, Upload, Download, Trash2, FileText,
-  NotebookPen, Volume2, ChevronLeft, Save, Loader2, Mic, X, Music,
-  LayoutList, Info, AudioLines, AlertTriangle, GripVertical, Pencil, Package,
-  Settings, Eraser, CheckCircle2,
+  AudioLines, AlertTriangle, BookOpen, CheckCircle2, ChevronLeft, Download, Eraser,
+  FileText, GripVertical, Info, LayoutList, Loader2, Mic, Music, NotebookPen,
+  Package, Pencil, Plus, Save, Settings, Trash2, Upload, Volume2, X,
 } from 'lucide-vue-next'
 import type { CustomLesson } from '~/data/curriculum'
 import type { TTSScriptModel } from '~/composables/useAcademyTTS'
@@ -398,8 +397,6 @@ const voiceOptions = [
   { id: 'bm_lewis',    label: 'Lewis',    accent: 'UK M' },
 ]
 
-// ── Section colors (shared hash-based palette via useAcademySectionColors) ────
-
 const uniqueSections = computed(() => {
   const seen = new Set<string>()
   for (const l of lessons.value) {
@@ -423,14 +420,14 @@ const groupedLessons = computed(() => {
 </script>
 
 <template>
-  <div class="flex h-full overflow-hidden bg-[var(--bg)] text-[var(--text)]">
+  <div class="flex h-full overflow-hidden text-[var(--text)]" style="background: var(--bg-base);">
 
-    <!-- ── Left sidebar ─────────────────────────────────────────────────────── -->
-    <div class="w-72 shrink-0 flex flex-col border-r border-[var(--border)] bg-[var(--bg-surface)]">
+    <!-- ── Sidebar ───────────────────────────────────────────────────────────── -->
+    <aside class="w-72 shrink-0 flex flex-col border-r border-[var(--border)]" style="background: #06060b;">
 
       <!-- Header -->
-      <div class="px-4 pt-5 pb-3 border-b border-[var(--border)]">
-        <div class="flex items-center justify-between mb-3">
+      <div class="shrink-0 px-4 pt-4 pb-3.5 border-b border-[var(--border)]">
+        <div class="flex items-center justify-between mb-4">
           <button
             class="flex items-center gap-1.5 text-[10px] text-[var(--text-faint)] hover:text-[var(--text-muted)] transition-colors"
             @click="router.push('/academy')"
@@ -439,70 +436,68 @@ const groupedLessons = computed(() => {
           </button>
           <button
             :title="showSettings ? 'Back to lessons' : 'Studio settings'"
-            class="size-6 grid place-items-center rounded-md text-[var(--text-faint)] hover:text-[var(--text)] hover:bg-[var(--bg-card)] transition-colors"
-            :class="showSettings ? 'text-fuchsia-400 bg-fuchsia-500/10' : ''"
+            class="size-6 grid place-items-center rounded-md transition-colors"
+            :class="showSettings ? 'text-fuchsia-400 bg-fuchsia-500/15' : 'text-[var(--text-faint)] hover:text-[var(--text)] hover:bg-white/[0.06]'"
             @click="showSettings = !showSettings; settingsMsg = ''; settingsError = ''"
           >
             <Settings class="size-3.5" />
           </button>
         </div>
-        <div class="flex items-center gap-2">
-          <BookOpen class="size-4 text-fuchsia-400" />
-          <h1 class="text-sm font-semibold text-[var(--text)]">Academy Studio</h1>
-          <span class="ml-auto text-[9px] bg-fuchsia-500/15 text-fuchsia-300 border border-fuchsia-500/20 rounded px-1.5 py-0.5">SECRET</span>
+        <div class="flex items-center gap-3">
+          <div class="size-9 shrink-0 rounded-xl border border-fuchsia-500/20 bg-fuchsia-500/[0.08] grid place-items-center">
+            <BookOpen class="size-4 text-fuchsia-400" />
+          </div>
+          <div class="min-w-0">
+            <div class="flex items-center gap-1.5 mb-0.5">
+              <h1 class="text-sm font-semibold text-[var(--text)]">Academy Studio</h1>
+              <span class="rounded-full text-[8px] font-bold uppercase tracking-widest bg-fuchsia-500/15 text-fuchsia-300/70 border border-fuchsia-500/20 px-1.5 py-px">Secret</span>
+            </div>
+            <p class="text-[9px] text-[var(--text-faint)]">
+              {{ lessons.length }} lesson{{ lessons.length !== 1 ? 's' : '' }} · course-bin
+            </p>
+          </div>
         </div>
-        <p class="text-[10px] text-[var(--text-faint)] mt-1">Create &amp; manage custom lessons</p>
       </div>
 
       <!-- Actions -->
-      <div class="flex gap-2 p-3 border-b border-[var(--border)]">
+      <div class="shrink-0 px-3 py-2.5 border-b border-[var(--border)] flex gap-2">
         <button
-          class="flex-1 flex items-center justify-center gap-1.5 rounded-lg border border-fuchsia-500/30 bg-fuchsia-500/10 px-2.5 py-1.5 text-[11px] text-fuchsia-300 hover:bg-fuchsia-500/20 transition-colors"
+          class="flex-1 h-8 flex items-center justify-center gap-1.5 rounded-lg border border-fuchsia-500/25 bg-fuchsia-500/[0.08] text-[11px] font-medium text-fuchsia-300 hover:bg-fuchsia-500/[0.15] hover:border-fuchsia-400/35 transition-all"
           @click="openNew"
         >
           <Plus class="size-3.5" /> New Lesson
         </button>
         <button
           title="Import .va file"
-          class="flex items-center justify-center gap-1 rounded-lg border border-[var(--border)] px-2.5 py-1.5 text-[var(--text-faint)] hover:text-[var(--text)] hover:bg-[var(--bg-card)] transition-colors"
+          class="size-8 flex items-center justify-center rounded-lg border border-[var(--border)] text-[var(--text-faint)] hover:text-[var(--text)] hover:bg-white/[0.05] hover:border-white/10 transition-colors"
           @click="doImport"
         >
           <Upload class="size-3.5" />
         </button>
       </div>
 
-      <!-- Section filter chips -->
-      <div v-if="uniqueSections.length > 1" class="px-3 py-2 border-b border-[var(--border)] flex flex-wrap gap-1">
+      <!-- Section filter pills -->
+      <div v-if="uniqueSections.length > 1" class="shrink-0 px-3 py-2 border-b border-[var(--border)] flex flex-wrap gap-1">
         <button
-          class="rounded-full border px-2 py-0.5 text-[9px] transition-colors"
-          :class="sectionFilter === null
-            ? 'border-[var(--border)] bg-[var(--bg-card)] text-[var(--text-muted)]'
-            : 'border-[var(--border)] text-[var(--text-faint)] hover:text-[var(--text-muted)]'"
+          class="rounded-md px-2.5 py-0.5 text-[9px] font-medium transition-colors"
+          :class="sectionFilter === null ? 'bg-white/[0.07] text-[var(--text-muted)]' : 'text-[var(--text-faint)] hover:text-[var(--text-muted)]'"
           @click="sectionFilter = null"
-        >
-          All
-        </button>
+        >All</button>
         <button
           v-for="sec in uniqueSections"
           :key="sec"
-          class="rounded-full border px-2 py-0.5 text-[9px] transition-colors"
-          :class="[
-            getSectionColor(sec).border,
-            getSectionColor(sec).bg,
-            getSectionColor(sec).color,
-            sectionFilter !== sec && 'opacity-60 hover:opacity-100',
-          ]"
+          class="rounded-md px-2.5 py-0.5 text-[9px] font-medium transition-colors"
+          :class="sectionFilter === sec
+            ? [getSectionColor(sec).bg, getSectionColor(sec).color]
+            : 'text-[var(--text-faint)] hover:text-[var(--text-muted)]'"
           @click="sectionFilter = sectionFilter === sec ? null : sec"
-        >
-          {{ sec }}
-        </button>
+        >{{ sec }}</button>
       </div>
 
       <!-- Settings panel -->
       <div v-if="showSettings" class="flex-1 overflow-y-auto p-3 space-y-3">
-        <p class="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-widest px-1 mb-1">Studio Settings</p>
+        <p class="text-[9px] font-bold uppercase tracking-[0.16em] text-[var(--text-faint)] px-1 mb-2">Studio Settings</p>
 
-        <!-- Feedback -->
         <div v-if="settingsMsg" class="flex items-center gap-1.5 rounded-lg border border-emerald-500/20 bg-emerald-500/[0.07] px-3 py-2">
           <CheckCircle2 class="size-3 text-emerald-400 shrink-0" />
           <p class="text-[10px] text-emerald-300">{{ settingsMsg }}</p>
@@ -512,14 +507,13 @@ const groupedLessons = computed(() => {
           <p class="text-[10px] text-red-300">{{ settingsError }}</p>
         </div>
 
-        <!-- Clear -->
         <div class="rounded-xl border border-red-500/20 bg-red-500/[0.04] p-3 space-y-2">
           <div class="flex items-center gap-1.5">
             <Eraser class="size-3.5 text-red-400" />
             <p class="text-[11px] font-semibold text-[var(--text)]">Clear AppData</p>
           </div>
           <p class="text-[10px] text-[var(--text-faint)] leading-relaxed">
-            Deletes <strong class="text-[var(--text-muted)]">all</strong> <code class="text-[9px]">.va</code> files from your AppData <code class="text-[9px]">course-bin/</code>. Use this to test a clean seed. Cannot be undone.
+            Deletes all <code class="text-[9px]">.va</code> files from your AppData <code class="text-[9px]">course-bin/</code>. Use to test a clean seed. Cannot be undone.
           </p>
           <button
             :disabled="settingsWorking"
@@ -534,45 +528,45 @@ const groupedLessons = computed(() => {
       </div>
 
       <!-- Lesson list -->
-      <div v-else class="flex-1 overflow-y-auto py-2">
-        <div v-if="loading" class="flex items-center justify-center py-8 text-[var(--text-faint)]">
+      <div v-else class="flex-1 overflow-y-auto py-1">
+        <div v-if="loading" class="flex items-center justify-center py-12 text-[var(--text-faint)]">
           <Loader2 class="size-4 animate-spin mr-2" /> Loading…
         </div>
-        <div v-else-if="!lessons.length" class="px-4 py-6 text-center">
-          <BookOpen class="size-6 text-fuchsia-400/40 mx-auto mb-2" />
-          <p class="text-[11px] text-[var(--text-faint)]">No custom lessons yet.</p>
-          <p class="text-[10px] text-[var(--text-faint)] mt-0.5">Click "New Lesson" to get started.</p>
+        <div v-else-if="!lessons.length" class="flex flex-col items-center justify-center py-12 text-center px-6">
+          <div class="size-12 rounded-2xl border border-fuchsia-500/15 bg-fuchsia-500/[0.06] grid place-items-center mb-3">
+            <BookOpen class="size-5 text-fuchsia-400/40" />
+          </div>
+          <p class="text-[11px] text-[var(--text-faint)]">No lessons yet</p>
+          <p class="text-[10px] text-[var(--text-faint)]/50 mt-1 leading-relaxed">Click "New Lesson" to start building.</p>
         </div>
+
         <template v-else>
           <div
             v-for="group in groupedLessons"
             :key="group.name"
-            class="mb-1 rounded-lg transition-all"
-            :class="dragOverSection === group.name && draggingSection !== group.name ? [getSectionColor(group.name).border, 'border-t-2'] : 'border-t-2 border-transparent'"
+            class="mb-2 transition-all"
+            :class="dragOverSection === group.name && draggingSection !== group.name ? 'border-t-2 ' + getSectionColor(group.name).border : 'border-t-2 border-transparent'"
             @dragover.prevent="onSectionDragOver(group.name)"
             @drop.prevent="onSectionDrop(group.name)"
           >
-            <!-- Section header (drag handle + rename) -->
+            <!-- Section header -->
             <div
               :draggable="renamingSection !== group.name"
-              class="group/hdr flex items-center gap-2 px-3 py-1.5 mb-0.5 rounded-md select-none transition-opacity"
+              class="group/hdr flex items-center gap-2 px-3 py-1.5 select-none"
               :class="[
                 renamingSection === group.name ? '' : 'cursor-grab active:cursor-grabbing',
-                draggingSection === group.name ? 'opacity-40' : 'hover:bg-[var(--bg-card)]',
+                draggingSection === group.name ? 'opacity-30' : '',
               ]"
               @dragstart="renamingSection !== group.name && onSectionDragStart($event, group.name)"
               @dragend="onSectionDragEnd"
             >
-              <GripVertical class="size-3 shrink-0 text-[var(--text-faint)]" />
-              <span
-                class="size-1.5 rounded-full shrink-0"
-                :class="getSectionColor(renamingSection === group.name ? renameSectionValue || group.name : group.name).dot"
-              />
-              <!-- Inline rename input -->
+              <GripVertical class="size-2.5 shrink-0 text-[var(--text-faint)]/30 group-hover/hdr:text-[var(--text-faint)]/70 transition-colors" />
+              <span class="size-1.5 rounded-full shrink-0" :class="getSectionColor(renamingSection === group.name ? renameSectionValue || group.name : group.name).dot" />
+
               <template v-if="renamingSection === group.name">
                 <input
                   v-model="renameSectionValue"
-                  class="flex-1 min-w-0 bg-transparent border-b border-fuchsia-500/50 text-[9px] font-bold uppercase tracking-widest outline-none text-fuchsia-300 pb-px"
+                  class="flex-1 min-w-0 bg-transparent border-b border-fuchsia-500/40 text-[9px] font-bold uppercase tracking-[0.14em] outline-none pb-px"
                   :class="getSectionColor(group.name).color"
                   @keydown.enter.prevent="commitRenameSection"
                   @keydown.escape.prevent="cancelRenameSection"
@@ -582,66 +576,80 @@ const groupedLessons = computed(() => {
                 />
               </template>
               <template v-else>
-                <span
-                  class="text-[9px] font-bold uppercase tracking-widest truncate flex-1"
-                  :class="getSectionColor(group.name).color"
-                >{{ group.name }}</span>
+                <span class="flex-1 text-[9px] font-bold uppercase tracking-[0.14em] truncate" :class="getSectionColor(group.name).color">
+                  {{ group.name }}
+                </span>
               </template>
+
               <button
                 v-if="renamingSection !== group.name"
                 title="Rename section"
-                class="size-4 grid place-items-center rounded opacity-0 group-hover/hdr:opacity-100 text-[var(--text-faint)] hover:text-[var(--text)] hover:bg-[var(--bg-surface)] transition-all shrink-0"
+                class="size-4 grid place-items-center rounded opacity-0 group-hover/hdr:opacity-100 text-[var(--text-faint)] hover:text-[var(--text)] transition-all shrink-0"
                 @click.stop="startRenameSection(group.name)"
                 @dragstart.stop
               >
                 <Pencil class="size-2.5" />
               </button>
-              <span class="text-[9px] text-[var(--text-faint)] shrink-0">{{ group.items.length }}</span>
-              <Loader2 v-if="reordering" class="size-2.5 animate-spin text-[var(--text-faint)]" />
+              <span class="text-[9px] text-[var(--text-faint)]/40 shrink-0 tabular-nums">{{ group.items.length }}</span>
+              <Loader2 v-if="reordering" class="size-2.5 animate-spin text-[var(--text-faint)]/50 shrink-0" />
             </div>
-            <!-- Lessons in section -->
-            <div class="space-y-0.5 px-2">
+
+            <!-- Lesson cards -->
+            <div class="px-2 space-y-px">
               <div
                 v-for="lesson in group.items"
                 :key="lesson.id"
-                class="group rounded-lg border p-2.5 cursor-pointer transition-colors"
+                class="group/card flex items-stretch rounded-lg cursor-pointer overflow-hidden transition-all"
                 :class="editingLesson?.id === lesson.id
-                  ? [getSectionColor(lesson.section).border, getSectionColor(lesson.section).bg]
-                  : 'border-transparent hover:border-[var(--border)] hover:bg-[var(--bg-card)]'"
+                  ? 'bg-[var(--bg-card)] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.07)]'
+                  : 'hover:bg-white/[0.035]'"
                 @click="openEdit(lesson)"
               >
-                <div class="flex items-start justify-between gap-2">
-                  <div class="min-w-0 flex-1">
-                    <p class="text-[11px] font-medium text-[var(--text)] truncate">{{ lesson.title || '(Untitled)' }}</p>
-                    <p class="text-[9px] text-[var(--text-faint)] mt-0.5">{{ lesson.duration }}</p>
+                <!-- Left accent bar -->
+                <div
+                  class="w-[3px] shrink-0 transition-opacity"
+                  :class="[getSectionColor(lesson.section).dot, editingLesson?.id === lesson.id ? 'opacity-100' : 'opacity-0 group-hover/card:opacity-60']"
+                />
+                <!-- Content -->
+                <div class="flex-1 min-w-0 px-2.5 py-2.5">
+                  <div class="flex items-start gap-1.5">
+                    <div class="flex-1 min-w-0">
+                      <p class="text-[11px] font-medium text-[var(--text)] truncate leading-tight">
+                        {{ lesson.title || '(Untitled)' }}
+                      </p>
+                      <p v-if="lesson.subtitle" class="text-[10px] text-[var(--text-faint)] truncate mt-0.5 leading-tight">
+                        {{ lesson.subtitle }}
+                      </p>
+                    </div>
+                    <!-- Hover actions -->
+                    <div class="flex items-center gap-0.5 shrink-0 opacity-0 group-hover/card:opacity-100 transition-opacity">
+                      <button
+                        title="Export .va"
+                        class="size-5 grid place-items-center rounded text-[var(--text-faint)] hover:text-[var(--text)] hover:bg-white/[0.08] transition-colors"
+                        @click.stop="exportLesson(lesson)"
+                      >
+                        <Download class="size-3" />
+                      </button>
+                      <button
+                        title="Delete"
+                        class="size-5 grid place-items-center rounded text-[var(--text-faint)] hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                        @click.stop="confirmDelete = lesson; showDeleteModal = true"
+                      >
+                        <Trash2 class="size-3" />
+                      </button>
+                    </div>
                   </div>
-                  <div class="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button
-                      title="Export .va"
-                      class="size-5 grid place-items-center rounded text-[var(--text-faint)] hover:text-[var(--text)] hover:bg-[var(--bg-surface)] transition-colors"
-                      @click.stop="exportLesson(lesson)"
-                    >
-                      <Download class="size-3" />
-                    </button>
-                    <button
-                      title="Delete"
-                      class="size-5 grid place-items-center rounded text-[var(--text-faint)] hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                      @click.stop="confirmDelete = lesson; showDeleteModal = true"
-                    >
-                      <Trash2 class="size-3" />
-                    </button>
+                  <!-- Meta row -->
+                  <div class="flex items-center gap-2 mt-1.5 flex-wrap">
+                    <span class="text-[9px] text-[var(--text-faint)]/50">{{ lesson.duration }}</span>
+                    <span v-if="lesson.embeddedAudio" class="flex items-center gap-0.5 text-[9px] text-teal-400/60">
+                      <AudioLines class="size-2.5" />Audio
+                    </span>
+                    <span v-if="bundledFilenames.has(lesson.vaFilename)" class="flex items-center gap-0.5 text-[9px] text-amber-400/60">
+                      <Package class="size-2.5" />Bundled
+                    </span>
+                    <span class="text-[9px] text-[var(--text-faint)]/30 font-mono truncate">{{ lesson.vaFilename }}</span>
                   </div>
-                </div>
-                <div class="mt-1 flex items-center flex-wrap gap-x-2 gap-y-0.5">
-                  <div v-if="lesson.embeddedAudio" class="flex items-center gap-1">
-                    <AudioLines class="size-2.5 text-teal-400" />
-                    <span class="text-[9px] text-teal-400">Audio included</span>
-                  </div>
-                  <div v-if="bundledFilenames.has(lesson.vaFilename)" class="flex items-center gap-1">
-                    <Package class="size-2.5 text-amber-400" />
-                    <span class="text-[9px] text-amber-400">Bundled</span>
-                  </div>
-                  <span class="text-[9px] text-[var(--text-faint)] font-mono truncate">{{ lesson.vaFilename }}</span>
                 </div>
               </div>
             </div>
@@ -649,26 +657,30 @@ const groupedLessons = computed(() => {
         </template>
       </div>
 
-      <!-- Error display -->
-      <div v-if="saveError" class="p-3 border-t border-red-500/20 bg-red-500/[0.06]">
+      <!-- Error bar -->
+      <div v-if="saveError" class="shrink-0 px-3 py-2.5 border-t border-red-500/15 bg-red-500/[0.05]">
         <p class="text-[10px] text-red-400 flex items-start gap-1.5">
           <AlertTriangle class="size-3 shrink-0 mt-0.5" />
           {{ saveError }}
         </p>
-        <button class="text-[9px] text-red-400/70 hover:text-red-400 mt-1" @click="saveError = ''">Dismiss</button>
+        <button class="text-[9px] text-red-400/50 hover:text-red-400 mt-1 transition-colors" @click="saveError = ''">Dismiss</button>
       </div>
-    </div>
+    </aside>
 
-    <!-- ── Editor panel ──────────────────────────────────────────────────────── -->
+    <!-- ── Editor ─────────────────────────────────────────────────────────────── -->
     <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
 
       <!-- Empty state -->
       <div v-if="!editingLesson" class="flex-1 flex flex-col items-center justify-center text-center px-8">
-        <BookOpen class="size-10 text-fuchsia-400/30 mb-4" />
-        <h2 class="text-sm font-medium text-[var(--text-muted)] mb-1">No lesson selected</h2>
-        <p class="text-[11px] text-[var(--text-faint)] max-w-xs mb-4">Select a lesson from the list or create a new one to start editing.</p>
+        <div class="size-16 rounded-2xl border border-fuchsia-500/15 bg-fuchsia-500/[0.06] grid place-items-center mb-5">
+          <BookOpen class="size-7 text-fuchsia-400/40" />
+        </div>
+        <h2 class="text-sm font-semibold text-[var(--text-muted)] mb-1.5">Select or create a lesson</h2>
+        <p class="text-[11px] text-[var(--text-faint)] max-w-xs mb-5 leading-relaxed">
+          Choose a lesson from the sidebar to edit, or create a new one to start building your course.
+        </p>
         <button
-          class="flex items-center gap-1.5 rounded-lg border border-fuchsia-500/30 bg-fuchsia-500/10 px-3 py-1.5 text-[11px] text-fuchsia-300 hover:bg-fuchsia-500/20 transition-colors"
+          class="flex items-center gap-2 rounded-xl border border-fuchsia-500/25 bg-fuchsia-500/[0.08] px-4 py-2 text-[11px] font-medium text-fuchsia-300 hover:bg-fuchsia-500/[0.15] transition-colors"
           @click="openNew"
         >
           <Plus class="size-3.5" /> New Lesson
@@ -678,161 +690,178 @@ const groupedLessons = computed(() => {
       <!-- Editor -->
       <template v-else>
         <!-- Editor header -->
-        <div class="flex items-center gap-3 px-5 py-3.5 border-b border-[var(--border)] bg-[var(--bg-surface)] shrink-0">
-          <div class="flex-1 min-w-0">
-            <p class="text-[10px] text-fuchsia-300/60 font-medium uppercase tracking-wide mb-0.5">
-              {{ isNew ? 'New lesson' : 'Editing lesson' }}
-            </p>
-            <p class="text-sm font-semibold text-[var(--text)] truncate">{{ editingLesson.title || '(Untitled)' }}</p>
+        <div class="shrink-0 border-b border-[var(--border)]" style="background: var(--bg-surface);">
+          <!-- Top row: info + actions -->
+          <div class="flex items-center gap-3 px-5 py-3.5">
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-1.5 mb-1">
+                <span class="text-[9px] uppercase tracking-widest text-[var(--text-faint)]/60">{{ isNew ? 'New lesson' : 'Editing' }}</span>
+                <template v-if="editingLesson.section">
+                  <span class="text-[9px] text-[var(--text-faint)]/30">·</span>
+                  <span class="text-[9px] font-semibold" :class="getSectionColor(editingLesson.section).color">{{ editingLesson.section }}</span>
+                </template>
+              </div>
+              <p class="text-sm font-semibold text-[var(--text)] truncate">
+                {{ editingLesson.title || '(Untitled lesson)' }}
+              </p>
+            </div>
+            <div class="flex items-center gap-1.5 shrink-0">
+              <button
+                :disabled="saving"
+                class="flex items-center gap-1.5 rounded-lg border border-fuchsia-500/30 bg-fuchsia-500/10 px-3 py-1.5 text-[11px] font-medium text-fuchsia-300 hover:bg-fuchsia-500/[0.18] transition-colors disabled:opacity-50"
+                @click="save"
+              >
+                <Loader2 v-if="saving" class="size-3.5 animate-spin" />
+                <Save v-else class="size-3.5" />
+                Save
+              </button>
+              <button
+                v-if="!isNew"
+                class="flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-1.5 text-[11px] text-[var(--text-muted)] hover:bg-white/[0.04] transition-colors"
+                @click="exportLesson(editingLesson)"
+              >
+                <Download class="size-3.5" /> Export .va
+              </button>
+              <button
+                class="size-7 grid place-items-center rounded-lg border border-[var(--border)] text-[var(--text-faint)] hover:text-[var(--text)] hover:bg-white/[0.04] transition-colors"
+                @click="cancelEdit"
+              >
+                <X class="size-3.5" />
+              </button>
+            </div>
           </div>
-          <div class="flex items-center gap-2 shrink-0">
-            <button
-              :disabled="saving"
-              class="flex items-center gap-1.5 rounded-lg border border-fuchsia-500/30 bg-fuchsia-500/10 px-3 py-1.5 text-[11px] text-fuchsia-300 hover:bg-fuchsia-500/20 transition-colors disabled:opacity-50"
-              @click="save"
-            >
-              <Loader2 v-if="saving" class="size-3.5 animate-spin" />
-              <Save v-else class="size-3.5" />
-              Save
-            </button>
-            <button
-              v-if="!isNew"
-              class="flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-1.5 text-[11px] text-[var(--text-muted)] hover:bg-[var(--bg-card)] transition-colors"
-              @click="exportLesson(editingLesson)"
-            >
-              <Download class="size-3.5" /> Export .va
-            </button>
-            <button
-              class="size-7 grid place-items-center rounded-lg border border-[var(--border)] text-[var(--text-faint)] hover:text-[var(--text)] hover:bg-[var(--bg-card)] transition-colors"
-              @click="cancelEdit"
-            >
-              <X class="size-3.5" />
-            </button>
-          </div>
-        </div>
 
-        <!-- Tabs -->
-        <div class="flex items-center gap-0.5 px-5 py-2 border-b border-[var(--border)] bg-[var(--bg-surface)] shrink-0">
-          <button
-            v-for="tab in [
-              { id: 'metadata', label: 'Metadata', icon: LayoutList },
-              { id: 'content', label: 'Content', icon: FileText },
-              { id: 'notes', label: 'Agent Notes', icon: NotebookPen },
-              { id: 'audio', label: 'Audio', icon: Volume2 },
-            ]"
-            :key="tab.id"
-            class="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[11px] transition-colors"
-            :class="activeTab === tab.id
-              ? 'bg-fuchsia-500/15 text-fuchsia-300 border border-fuchsia-500/20'
-              : 'text-[var(--text-faint)] hover:text-[var(--text)] hover:bg-[var(--bg-card)]'"
-            @click="activeTab = (tab.id as typeof activeTab)"
-          >
-            <component :is="tab.icon" class="size-3" />
-            {{ tab.label }}
-            <span v-if="tab.id === 'audio' && editingLesson.embeddedAudio" class="size-1.5 rounded-full bg-teal-400" />
-          </button>
+          <!-- Tab bar (underline style) -->
+          <div class="flex items-end px-5 gap-0 border-t border-[var(--border)]">
+            <button
+              v-for="tab in [
+                { id: 'metadata', label: 'Metadata', icon: LayoutList },
+                { id: 'content', label: 'Content', icon: FileText },
+                { id: 'notes', label: 'Agent Notes', icon: NotebookPen },
+                { id: 'audio', label: 'Audio', icon: Volume2 },
+              ]"
+              :key="tab.id"
+              class="flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-medium border-b-2 transition-all -mb-px"
+              :class="activeTab === tab.id
+                ? 'border-fuchsia-400 text-fuchsia-300'
+                : 'border-transparent text-[var(--text-faint)] hover:text-[var(--text-muted)] hover:border-white/10'"
+              @click="activeTab = (tab.id as typeof activeTab)"
+            >
+              <component :is="tab.icon" class="size-3" />
+              {{ tab.label }}
+              <span v-if="tab.id === 'audio' && editingLesson.embeddedAudio" class="size-1.5 rounded-full bg-teal-400" />
+            </button>
+          </div>
         </div>
 
         <!-- Tab content -->
-        <div class="flex-1 overflow-y-auto p-5">
+        <div class="flex-1 overflow-y-auto p-6">
 
-          <!-- Metadata tab -->
-          <div v-if="activeTab === 'metadata'" class="max-w-lg space-y-4">
+          <!-- ── Metadata ── -->
+          <div v-if="activeTab === 'metadata'" class="max-w-xl space-y-5">
+
+            <!-- Title -->
             <div>
-              <label class="block text-[10px] font-medium text-[var(--text-muted)] mb-1">Lesson Title <span class="text-red-400">*</span></label>
+              <label class="block text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-1.5">
+                Lesson Title <span class="text-red-400 normal-case tracking-normal font-normal">*</span>
+              </label>
               <input
                 v-model="editingLesson.title"
                 type="text"
                 placeholder="e.g. Advanced JWT Security"
-                class="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-card)] px-3 py-2 text-xs text-[var(--text)] placeholder-[var(--text-faint)] focus:outline-none focus:border-fuchsia-500/50 focus:ring-1 focus:ring-fuchsia-500/20 transition-colors"
+                class="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-card)] px-3.5 py-2.5 text-sm text-[var(--text)] placeholder-[var(--text-faint)] focus:outline-none focus:border-fuchsia-500/50 focus:ring-1 focus:ring-fuchsia-500/20 transition-colors"
               />
             </div>
 
+            <!-- Subtitle -->
             <div>
-              <label class="block text-[10px] font-medium text-[var(--text-muted)] mb-1">
-                Section <span class="text-[var(--text-faint)] font-normal">— groups lessons in the Academy</span>
+              <label class="block text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-1.5">
+                Subtitle <span class="normal-case tracking-normal font-normal text-[var(--text-faint)]">— short description shown on lesson cards</span>
               </label>
-              <!-- Existing section quick-picks -->
-              <div v-if="uniqueSections.length" class="flex flex-wrap gap-1 mb-2">
+              <input
+                v-model="editingLesson.subtitle"
+                type="text"
+                placeholder="e.g. Exploiting weak secrets and alg:none attacks"
+                class="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-card)] px-3.5 py-2.5 text-sm text-[var(--text)] placeholder-[var(--text-faint)] focus:outline-none focus:border-fuchsia-500/50 focus:ring-1 focus:ring-fuchsia-500/20 transition-colors"
+              />
+            </div>
+
+            <!-- Section -->
+            <div>
+              <label class="block text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-1.5">
+                Section <span class="normal-case tracking-normal font-normal text-[var(--text-faint)]">— groups lessons together in the Academy</span>
+              </label>
+              <div v-if="uniqueSections.length" class="flex flex-wrap gap-1.5 mb-2">
                 <button
                   v-for="sec in uniqueSections"
                   :key="sec"
-                  class="rounded-full border px-2.5 py-0.5 text-[9px] transition-colors"
+                  class="rounded-lg border px-2.5 py-1 text-[10px] transition-colors"
                   :class="editingLesson.section === sec
                     ? [getSectionColor(sec).border, getSectionColor(sec).bg, getSectionColor(sec).color]
-                    : 'border-[var(--border)] text-[var(--text-faint)] hover:text-[var(--text)] hover:border-[var(--border)]'"
+                    : 'border-[var(--border)] text-[var(--text-faint)] hover:text-[var(--text-muted)]'"
                   @click="editingLesson.section = sec"
                 >{{ sec }}</button>
               </div>
-              <!-- Free text + datalist for new section -->
               <input
                 v-model="editingLesson.section"
                 type="text"
                 list="studio-section-list"
-                :placeholder="uniqueSections.length ? 'Pick above or type a new section name…' : 'e.g. Security Engineering Bootcamp…'"
-                class="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-card)] px-3 py-2 text-xs text-[var(--text)] placeholder-[var(--text-faint)] focus:outline-none focus:border-fuchsia-500/50 focus:ring-1 focus:ring-fuchsia-500/20 transition-colors"
+                :placeholder="uniqueSections.length ? 'Pick above or type a new section name…' : 'e.g. Security Engineering Bootcamp'"
+                class="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-card)] px-3.5 py-2.5 text-sm text-[var(--text)] placeholder-[var(--text-faint)] focus:outline-none focus:border-fuchsia-500/50 focus:ring-1 focus:ring-fuchsia-500/20 transition-colors"
               />
               <datalist id="studio-section-list">
                 <option v-for="sec in uniqueSections" :key="sec" :value="sec" />
               </datalist>
-              <p class="text-[9px] text-[var(--text-faint)] mt-1">Lessons with the same section name are grouped together. Pick an existing section or type a new name.</p>
             </div>
 
+            <!-- Duration -->
             <div>
-              <label class="block text-[10px] font-medium text-[var(--text-muted)] mb-1">Duration</label>
+              <label class="block text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-1.5">Duration</label>
               <input
                 v-model="editingLesson.duration"
                 type="text"
                 placeholder="e.g. 30 min"
-                class="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-card)] px-3 py-2 text-xs text-[var(--text)] placeholder-[var(--text-faint)] focus:outline-none focus:border-fuchsia-500/50 focus:ring-1 focus:ring-fuchsia-500/20 transition-colors"
+                class="w-40 rounded-xl border border-[var(--border)] bg-[var(--bg-card)] px-3.5 py-2.5 text-sm text-[var(--text)] placeholder-[var(--text-faint)] focus:outline-none focus:border-fuchsia-500/50 focus:ring-1 focus:ring-fuchsia-500/20 transition-colors"
               />
             </div>
 
+            <!-- Objectives -->
             <div>
-              <div class="flex items-center justify-between mb-1">
-                <label class="text-[10px] font-medium text-[var(--text-muted)]">Learning Objectives</label>
-                <button
-                  class="text-[9px] text-fuchsia-400 hover:text-fuchsia-300 transition-colors"
-                  @click="addObjective"
-                >
-                  + Add
-                </button>
+              <div class="flex items-center justify-between mb-1.5">
+                <label class="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Learning Objectives</label>
+                <button class="text-[10px] text-fuchsia-400 hover:text-fuchsia-300 transition-colors" @click="addObjective">+ Add</button>
               </div>
-              <div class="space-y-1.5">
-                <div
-                  v-for="(obj, i) in editingLesson.objectives"
-                  :key="i"
-                  class="flex items-center gap-2"
-                >
+              <div class="space-y-2">
+                <div v-for="(obj, i) in editingLesson.objectives" :key="i" class="flex items-center gap-2">
                   <input
                     :value="obj"
                     type="text"
                     :placeholder="`Objective ${i + 1}`"
-                    class="flex-1 rounded-lg border border-[var(--border)] bg-[var(--bg-card)] px-3 py-1.5 text-xs text-[var(--text)] placeholder-[var(--text-faint)] focus:outline-none focus:border-fuchsia-500/50 focus:ring-1 focus:ring-fuchsia-500/20 transition-colors"
+                    class="flex-1 rounded-xl border border-[var(--border)] bg-[var(--bg-card)] px-3.5 py-2 text-sm text-[var(--text)] placeholder-[var(--text-faint)] focus:outline-none focus:border-fuchsia-500/50 focus:ring-1 focus:ring-fuchsia-500/20 transition-colors"
                     @input="updateObjective(i, ($event.target as HTMLInputElement).value)"
                   />
-                  <button
-                    class="size-5 grid place-items-center text-[var(--text-faint)] hover:text-red-400 transition-colors"
-                    @click="removeObjective(i)"
-                  >
-                    <X class="size-3" />
+                  <button class="size-6 grid place-items-center text-[var(--text-faint)] hover:text-red-400 transition-colors" @click="removeObjective(i)">
+                    <X class="size-3.5" />
                   </button>
                 </div>
               </div>
             </div>
 
+            <!-- Lab Hint -->
             <div>
-              <label class="block text-[10px] font-medium text-[var(--text-muted)] mb-1">Lab Hint <span class="text-[var(--text-faint)]">(optional)</span></label>
+              <label class="block text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-1.5">
+                Lab Hint <span class="normal-case tracking-normal font-normal text-[var(--text-faint)]">— optional practical exercise hint</span>
+              </label>
               <textarea
                 v-model="editingLesson.labHint"
                 rows="3"
                 placeholder="Practical exercise hint for learners…"
-                class="w-full resize-none rounded-lg border border-[var(--border)] bg-[var(--bg-card)] px-3 py-2 text-xs text-[var(--text)] placeholder-[var(--text-faint)] focus:outline-none focus:border-fuchsia-500/50 focus:ring-1 focus:ring-fuchsia-500/20 transition-colors"
+                class="w-full resize-none rounded-xl border border-[var(--border)] bg-[var(--bg-card)] px-3.5 py-2.5 text-sm text-[var(--text)] placeholder-[var(--text-faint)] focus:outline-none focus:border-fuchsia-500/50 focus:ring-1 focus:ring-fuchsia-500/20 transition-colors leading-relaxed"
               />
             </div>
           </div>
 
-          <!-- Content tab -->
+          <!-- ── Content ── -->
           <div v-else-if="activeTab === 'content'" class="h-full flex flex-col" style="min-height: 60vh;">
             <StudioMarkdownEditor
               v-model="editingLesson.content"
@@ -841,63 +870,52 @@ const groupedLessons = computed(() => {
             />
           </div>
 
-          <!-- Agent Notes tab -->
-          <div v-else-if="activeTab === 'notes'" class="max-w-2xl space-y-3">
-            <div class="rounded-xl border border-fuchsia-500/20 bg-fuchsia-500/[0.06] px-4 py-3">
-              <div class="flex items-start gap-2">
-                <Info class="size-3.5 shrink-0 mt-0.5 text-fuchsia-400" />
-                <div class="text-[10px] text-fuchsia-200/70 leading-relaxed">
-                  <strong class="text-fuchsia-200/90">Agent notes</strong> are injected into the AI Professor's system prompt when a student opens this lesson in AI-assisted mode. Use them to provide background context, teaching objectives, common misconceptions, or hints that guide the professor's responses.
+          <!-- ── Agent Notes ── -->
+          <div v-else-if="activeTab === 'notes'" class="max-w-2xl space-y-4">
+            <div class="rounded-xl border border-fuchsia-500/15 bg-fuchsia-500/[0.05] px-4 py-3">
+              <div class="flex items-start gap-2.5">
+                <Info class="size-3.5 shrink-0 mt-0.5 text-fuchsia-400/70" />
+                <div class="text-[10px] text-fuchsia-200/60 leading-relaxed">
+                  <strong class="text-fuchsia-200/80">Agent notes</strong> are injected into the AI Professor's system prompt when a student opens this lesson in AI-assisted mode. Use them to guide the professor's teaching approach, flag common misconceptions, and provide background context.
                 </div>
               </div>
             </div>
             <textarea
               v-model="editingLesson.agentNotes"
-              rows="20"
+              rows="22"
               placeholder="Example: This lesson covers JWT vulnerabilities. Key teaching points: alg:none attack, weak secret brute-force, kid injection. The professor should ask students to identify the vulnerability in code snippets before explaining the fix."
-              class="w-full resize-none rounded-lg border border-[var(--border)] bg-[var(--bg-card)] px-3 py-2.5 text-xs text-[var(--text)] placeholder-[var(--text-faint)] focus:outline-none focus:border-fuchsia-500/50 focus:ring-1 focus:ring-fuchsia-500/20 transition-colors leading-relaxed"
+              class="w-full resize-none rounded-xl border border-[var(--border)] bg-[var(--bg-card)] px-3.5 py-3 text-[11px] text-[var(--text)] placeholder-[var(--text-faint)] focus:outline-none focus:border-fuchsia-500/50 focus:ring-1 focus:ring-fuchsia-500/20 transition-colors leading-relaxed font-mono"
             />
           </div>
 
-          <!-- Audio tab -->
+          <!-- ── Audio ── -->
           <div v-else-if="activeTab === 'audio'" class="max-w-lg space-y-4">
 
             <!-- Existing audio player -->
             <div v-if="audioObjUrl" class="rounded-xl border border-teal-500/20 bg-teal-500/[0.06] p-4">
-              <div class="flex items-center gap-2 mb-2">
+              <div class="flex items-center gap-2 mb-3">
                 <Music class="size-3.5 text-teal-400" />
                 <span class="text-[11px] font-medium text-teal-300">Audio narration</span>
-                <span class="text-[9px] text-teal-400/60 ml-auto">
-                  {{ editingLesson.embeddedAudio?.voice ?? '' }}
-                </span>
+                <span class="text-[9px] text-teal-400/50 ml-auto">{{ editingLesson.embeddedAudio?.voice ?? '' }}</span>
               </div>
               <audio :src="audioObjUrl" controls class="w-full h-8 rounded" />
-              <button
-                class="mt-2 text-[10px] text-red-400/70 hover:text-red-400 transition-colors"
-                @click="clearAudio"
-              >
+              <button class="mt-2 text-[10px] text-red-400/60 hover:text-red-400 transition-colors" @click="clearAudio">
                 Remove audio
               </button>
             </div>
 
-            <!-- Generation progress -->
-            <div
-              v-if="isGeneratingAudio"
-              class="rounded-xl border border-indigo-500/20 bg-indigo-500/[0.06] px-4 py-3 flex items-center gap-2"
-            >
+            <!-- Generating progress -->
+            <div v-if="isGeneratingAudio" class="rounded-xl border border-indigo-500/20 bg-indigo-500/[0.06] px-4 py-3 flex items-center gap-2">
               <Loader2 class="size-3.5 animate-spin text-indigo-400 shrink-0" />
               <span class="text-[11px] text-indigo-200/80">{{ audioProgressMsg || 'Generating…' }}</span>
             </div>
 
             <!-- Audio error -->
-            <div
-              v-if="audioError"
-              class="rounded-xl border border-red-500/20 bg-red-500/[0.06] px-4 py-3 flex items-start gap-2"
-            >
+            <div v-if="audioError" class="rounded-xl border border-red-500/20 bg-red-500/[0.06] px-4 py-3 flex items-start gap-2">
               <AlertTriangle class="size-3.5 shrink-0 mt-0.5 text-red-400" />
               <div>
                 <p class="text-[11px] text-red-300">{{ audioError }}</p>
-                <button class="text-[9px] text-red-400/70 hover:text-red-400 mt-1" @click="audioError = ''">Dismiss</button>
+                <button class="text-[9px] text-red-400/60 hover:text-red-400 mt-1" @click="audioError = ''">Dismiss</button>
               </div>
             </div>
 
@@ -909,30 +927,27 @@ const groupedLessons = computed(() => {
               </p>
             </div>
 
-            <!-- Generate section -->
-            <div class="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-4 space-y-3">
+            <!-- Generate card -->
+            <div class="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-4 space-y-4">
               <h3 class="text-[11px] font-semibold text-[var(--text)] flex items-center gap-1.5">
-                <Mic class="size-3.5 text-teal-400" />
-                Generate with TTS
+                <Mic class="size-3.5 text-teal-400" /> Generate with TTS
               </h3>
-              <p class="text-[10px] text-[var(--text-faint)] leading-relaxed">
-                An AI model will convert the lesson content into a spoken narration script, then Kokoro TTS synthesizes the audio. Requires Kokoro model files downloaded in AI Models.
+              <p class="text-[10px] text-[var(--text-faint)] leading-relaxed -mt-2">
+                An AI model converts the lesson content into a spoken narration script, then Kokoro TTS synthesizes the audio. Requires Kokoro model files downloaded in AI Models.
               </p>
 
               <div>
-                <label class="block text-[10px] text-[var(--text-muted)] mb-1">Script model</label>
+                <label class="block text-[10px] text-[var(--text-muted)] mb-1.5">Script model</label>
                 <div class="flex flex-wrap gap-1.5">
                   <button
                     v-for="opt in ttsModelOptions"
                     :key="opt.value"
-                    class="rounded-md border px-2 py-1 text-[10px] transition-colors"
+                    class="rounded-lg border px-2.5 py-1 text-[10px] transition-colors"
                     :class="ttsModel === opt.value
                       ? 'border-teal-500/30 bg-teal-500/10 text-teal-300'
-                      : 'border-[var(--border)] text-[var(--text-faint)] hover:text-[var(--text)] hover:bg-[var(--bg-card)]'"
+                      : 'border-[var(--border)] text-[var(--text-faint)] hover:text-[var(--text-muted)]'"
                     @click="ttsModel = opt.value"
-                  >
-                    {{ opt.label }}
-                  </button>
+                  >{{ opt.label }}</button>
                 </div>
               </div>
 
@@ -942,10 +957,10 @@ const groupedLessons = computed(() => {
                   <button
                     v-for="v in voiceOptions"
                     :key="v.id"
-                    class="rounded-md border px-1.5 py-1.5 text-center transition-colors"
+                    class="rounded-lg border px-1.5 py-1.5 text-center transition-colors"
                     :class="tts.selectedVoice.value === v.id
                       ? 'border-teal-500/30 bg-teal-500/10 text-teal-300'
-                      : 'border-[var(--border)] text-[var(--text-faint)] hover:text-[var(--text)] hover:bg-[var(--bg-surface)]'"
+                      : 'border-[var(--border)] text-[var(--text-faint)] hover:text-[var(--text-muted)] hover:bg-white/[0.04]'"
                     @click="tts.setVoice(v.id)"
                   >
                     <p class="text-[10px] font-medium truncate">{{ v.label }}</p>
@@ -956,7 +971,7 @@ const groupedLessons = computed(() => {
 
               <button
                 :disabled="isGeneratingAudio || !editingLesson.title"
-                class="flex items-center gap-1.5 rounded-lg border border-teal-500/30 bg-teal-500/10 px-3 py-1.5 text-[11px] text-teal-300 hover:bg-teal-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                class="flex items-center gap-1.5 rounded-lg border border-teal-500/30 bg-teal-500/10 px-3 py-1.5 text-[11px] font-medium text-teal-300 hover:bg-teal-500/[0.18] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 @click="generateAudio"
               >
                 <Loader2 v-if="isGeneratingAudio" class="size-3.5 animate-spin" />
@@ -965,15 +980,14 @@ const groupedLessons = computed(() => {
               </button>
             </div>
 
-            <!-- Upload section -->
+            <!-- Upload card -->
             <div class="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-4 space-y-2">
               <h3 class="text-[11px] font-semibold text-[var(--text)] flex items-center gap-1.5">
-                <Upload class="size-3.5 text-violet-400" />
-                Upload audio file
+                <Upload class="size-3.5 text-violet-400" /> Upload audio file
               </h3>
-              <p class="text-[10px] text-[var(--text-faint)]">WAV, MP3, OGG, or FLAC. The audio will be embedded in the exported .va file.</p>
+              <p class="text-[10px] text-[var(--text-faint)]">WAV, MP3, OGG, or FLAC. Embedded into the exported .va file.</p>
               <button
-                class="flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-1.5 text-[11px] text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--bg-surface)] transition-colors"
+                class="flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-1.5 text-[11px] text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-white/[0.04] transition-colors"
                 @click="uploadAudio"
               >
                 <Upload class="size-3.5" /> Choose File
@@ -984,29 +998,28 @@ const groupedLessons = computed(() => {
         </div>
 
         <!-- Bottom save bar -->
-        <div class="shrink-0 flex items-center justify-between gap-3 px-5 py-3 border-t border-[var(--border)] bg-[var(--bg-surface)]">
-          <p v-if="saveError" class="text-[10px] text-red-400 flex items-center gap-1">
-            <AlertTriangle class="size-3" /> {{ saveError }}
-          </p>
-          <div v-else-if="isNew" class="text-[10px] text-[var(--text-faint)]">Unsaved lesson</div>
-          <div v-else class="flex items-center gap-2 min-w-0">
-            <div v-if="bundledFilenames.has(editingLesson.vaFilename)" class="flex items-center gap-1 shrink-0">
-              <Package class="size-3 text-amber-400" />
-              <span class="text-[10px] text-amber-400 font-medium">Bundled</span>
-              <span class="text-[10px] text-amber-400/50">— saving overwrites the seeded copy</span>
+        <div class="shrink-0 flex items-center justify-between gap-3 px-5 py-3 border-t border-[var(--border)]" style="background: var(--bg-surface);">
+          <div class="min-w-0">
+            <p v-if="saveError" class="text-[10px] text-red-400 flex items-center gap-1.5">
+              <AlertTriangle class="size-3 shrink-0" /> {{ saveError }}
+            </p>
+            <p v-else-if="isNew" class="text-[10px] text-[var(--text-faint)]">Unsaved lesson</p>
+            <div v-else class="flex items-center gap-2 min-w-0">
+              <div v-if="bundledFilenames.has(editingLesson.vaFilename)" class="flex items-center gap-1 shrink-0">
+                <Package class="size-3 text-amber-400" />
+                <span class="text-[10px] text-amber-400 font-medium">Bundled</span>
+              </div>
+              <span class="text-[10px] text-[var(--text-faint)] font-mono truncate">{{ editingLesson.vaFilename }}</span>
             </div>
-            <span class="text-[10px] text-[var(--text-faint)] font-mono truncate">course-bin/{{ editingLesson.vaFilename }}</span>
           </div>
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-2 shrink-0">
             <button
-              class="rounded-lg border border-[var(--border)] px-3 py-1.5 text-[11px] text-[var(--text-muted)] hover:bg-[var(--bg-card)] transition-colors"
+              class="rounded-lg border border-[var(--border)] px-3 py-1.5 text-[11px] text-[var(--text-muted)] hover:bg-white/[0.04] transition-colors"
               @click="cancelEdit"
-            >
-              Cancel
-            </button>
+            >Cancel</button>
             <button
               :disabled="saving"
-              class="flex items-center gap-1.5 rounded-lg border border-fuchsia-500/30 bg-fuchsia-500/10 px-3 py-1.5 text-[11px] text-fuchsia-300 hover:bg-fuchsia-500/20 transition-colors disabled:opacity-50"
+              class="flex items-center gap-1.5 rounded-lg border border-fuchsia-500/30 bg-fuchsia-500/10 px-3 py-1.5 text-[11px] font-medium text-fuchsia-300 hover:bg-fuchsia-500/[0.18] transition-colors disabled:opacity-50"
               @click="save"
             >
               <Loader2 v-if="saving" class="size-3.5 animate-spin" />
@@ -1018,80 +1031,43 @@ const groupedLessons = computed(() => {
       </template>
     </div>
 
-    <!-- ── Clear AppData confirm modal ───────────────────────────────────────── -->
+    <!-- ── Clear AppData confirm ──────────────────────────────────────────────── -->
     <GlassModal v-model="showClearModal" title="Clear AppData Course-Bin">
       <p class="text-sm text-[var(--text-muted)] mb-4">
         This will delete <strong class="text-red-300">all</strong> <code class="text-xs">.va</code> files from your AppData course-bin. Any lessons you haven't exported will be permanently lost.
       </p>
       <div class="flex justify-end gap-2">
-        <button
-          class="rounded-lg border border-[var(--border)] px-3 py-1.5 text-[11px] text-[var(--text-muted)] hover:bg-[var(--bg-card)] transition-colors"
-          @click="showClearModal = false"
-        >Cancel</button>
-        <button
-          class="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-[11px] text-red-300 hover:bg-red-500/20 transition-colors"
-          @click="doClear"
-        >Clear All</button>
+        <button class="rounded-lg border border-[var(--border)] px-3 py-1.5 text-[11px] text-[var(--text-muted)] hover:bg-[var(--bg-card)] transition-colors" @click="showClearModal = false">Cancel</button>
+        <button class="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-[11px] text-red-300 hover:bg-red-500/20 transition-colors" @click="doClear">Clear All</button>
       </div>
     </GlassModal>
 
-    <!-- ── Save target modal ──────────────────────────────────────────────────── -->
+    <!-- ── Save / rename modal ────────────────────────────────────────────────── -->
     <GlassModal v-model="showSaveModal" :title="pendingAction.type === 'save-lesson' ? 'Save Lesson' : 'Rename Section'">
       <p class="text-xs text-[var(--text-muted)] mb-4">
         {{ pendingAction.type === 'save-lesson' ? 'Where should this lesson be saved?' : 'Where should this rename be applied?' }}
       </p>
 
       <div class="space-y-2 mb-5">
-        <!-- AppData -->
-        <label
-          class="flex items-start gap-3 rounded-xl border p-3 cursor-pointer transition-colors"
-          :class="saveTarget === 'appdata'
-            ? 'border-fuchsia-500/40 bg-fuchsia-500/10'
-            : 'border-[var(--border)] hover:bg-[var(--bg-card)]'"
-        >
+        <label class="flex items-start gap-3 rounded-xl border p-3 cursor-pointer transition-colors" :class="saveTarget === 'appdata' ? 'border-fuchsia-500/40 bg-fuchsia-500/10' : 'border-[var(--border)] hover:bg-[var(--bg-card)]'">
           <input v-model="saveTarget" type="radio" value="appdata" class="mt-0.5 accent-fuchsia-500" />
           <div>
             <p class="text-[11px] font-semibold text-[var(--text)]">AppData only</p>
-            <p class="text-[10px] text-[var(--text-faint)] mt-0.5 leading-relaxed">
-              Saves to your personal course-bin (<code class="text-[9px]">AppData/course-bin/</code>).
-              This is the default for new lessons.
-            </p>
+            <p class="text-[10px] text-[var(--text-faint)] mt-0.5 leading-relaxed">Saves to your personal course-bin. Default for new lessons.</p>
           </div>
         </label>
-
-        <!-- Bundled -->
-        <label
-          class="flex items-start gap-3 rounded-xl border p-3 cursor-pointer transition-colors"
-          :class="saveTarget === 'bundled'
-            ? 'border-amber-500/40 bg-amber-500/10'
-            : 'border-[var(--border)] hover:bg-[var(--bg-card)]'"
-        >
+        <label class="flex items-start gap-3 rounded-xl border p-3 cursor-pointer transition-colors" :class="saveTarget === 'bundled' ? 'border-amber-500/40 bg-amber-500/10' : 'border-[var(--border)] hover:bg-[var(--bg-card)]'">
           <input v-model="saveTarget" type="radio" value="bundled" class="mt-0.5 accent-amber-500" />
           <div>
-            <p class="text-[11px] font-semibold text-[var(--text)] flex items-center gap-1.5">
-              <Package class="size-3 text-amber-400" /> Bundled only
-            </p>
-            <p class="text-[10px] text-[var(--text-faint)] mt-0.5 leading-relaxed">
-              Overwrites the shipped copy in <code class="text-[9px]">resourceDir/course-bin/</code>.
-              New users will receive this version on first launch.
-            </p>
+            <p class="text-[11px] font-semibold text-[var(--text)] flex items-center gap-1.5"><Package class="size-3 text-amber-400" /> Bundled only</p>
+            <p class="text-[10px] text-[var(--text-faint)] mt-0.5 leading-relaxed">Overwrites the shipped copy in <code class="text-[9px]">resourceDir/course-bin/</code>.</p>
           </div>
         </label>
-
-        <!-- Both -->
-        <label
-          class="flex items-start gap-3 rounded-xl border p-3 cursor-pointer transition-colors"
-          :class="saveTarget === 'both'
-            ? 'border-indigo-500/40 bg-indigo-500/10'
-            : 'border-[var(--border)] hover:bg-[var(--bg-card)]'"
-        >
+        <label class="flex items-start gap-3 rounded-xl border p-3 cursor-pointer transition-colors" :class="saveTarget === 'both' ? 'border-indigo-500/40 bg-indigo-500/10' : 'border-[var(--border)] hover:bg-[var(--bg-card)]'">
           <input v-model="saveTarget" type="radio" value="both" class="mt-0.5 accent-indigo-500" />
           <div>
             <p class="text-[11px] font-semibold text-[var(--text)]">Both</p>
-            <p class="text-[10px] text-[var(--text-faint)] mt-0.5 leading-relaxed">
-              Saves to AppData <em>and</em> updates the bundled copy.
-              Recommended when editing a bundled lesson.
-            </p>
+            <p class="text-[10px] text-[var(--text-faint)] mt-0.5 leading-relaxed">AppData <em>and</em> bundled. Recommended when editing a bundled lesson.</p>
           </div>
         </label>
       </div>
@@ -1108,39 +1084,21 @@ const groupedLessons = computed(() => {
       </div>
 
       <div class="flex justify-end gap-2">
-        <button
-          class="rounded-lg border border-[var(--border)] px-3 py-1.5 text-[11px] text-[var(--text-muted)] hover:bg-[var(--bg-card)] transition-colors"
-          @click="showSaveModal = false"
-        >
-          Cancel
-        </button>
-        <button
-          class="flex items-center gap-1.5 rounded-lg border border-fuchsia-500/30 bg-fuchsia-500/10 px-3 py-1.5 text-[11px] text-fuchsia-300 hover:bg-fuchsia-500/20 transition-colors"
-          @click="confirmSave"
-        >
+        <button class="rounded-lg border border-[var(--border)] px-3 py-1.5 text-[11px] text-[var(--text-muted)] hover:bg-[var(--bg-card)] transition-colors" @click="showSaveModal = false">Cancel</button>
+        <button class="flex items-center gap-1.5 rounded-lg border border-fuchsia-500/30 bg-fuchsia-500/10 px-3 py-1.5 text-[11px] text-fuchsia-300 hover:bg-fuchsia-500/[0.18] transition-colors" @click="confirmSave">
           <Save class="size-3.5" /> Save
         </button>
       </div>
     </GlassModal>
 
-    <!-- ── Delete confirm modal ─────────────────────────────────────────────── -->
+    <!-- ── Delete confirm ─────────────────────────────────────────────────────── -->
     <GlassModal v-model="showDeleteModal" title="Delete Lesson">
       <p class="text-sm text-[var(--text-muted)] mb-4">
         Delete <strong class="text-[var(--text)]">{{ confirmDelete?.title }}</strong> from course-bin? This cannot be undone.
       </p>
       <div class="flex justify-end gap-2">
-        <button
-          class="rounded-lg border border-[var(--border)] px-3 py-1.5 text-[11px] text-[var(--text-muted)] hover:bg-[var(--bg-card)] transition-colors"
-          @click="showDeleteModal = false; confirmDelete = null"
-        >
-          Cancel
-        </button>
-        <button
-          class="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-[11px] text-red-300 hover:bg-red-500/20 transition-colors"
-          @click="confirmDelete && doDelete(confirmDelete)"
-        >
-          Delete
-        </button>
+        <button class="rounded-lg border border-[var(--border)] px-3 py-1.5 text-[11px] text-[var(--text-muted)] hover:bg-[var(--bg-card)] transition-colors" @click="showDeleteModal = false; confirmDelete = null">Cancel</button>
+        <button class="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-[11px] text-red-300 hover:bg-red-500/20 transition-colors" @click="confirmDelete && doDelete(confirmDelete)">Delete</button>
       </div>
     </GlassModal>
 

@@ -562,7 +562,7 @@ onMounted(() => {
             <GlassButton size="sm" :disabled="ollamaChecking" @click="checkOllama">
               <Loader2 v-if="ollamaChecking" class="size-3.5 animate-spin" />
               <RefreshCw v-else class="size-3.5" />
-              Test Connection
+              Verify
             </GlassButton>
           </div>
         </div>

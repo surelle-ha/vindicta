@@ -6,6 +6,7 @@ export interface Lesson {
   day: number
   week: number
   title: string
+  subtitle?: string
   duration: string
   objectives: string[]
   content: string
