@@ -62,6 +62,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: List bundle output
+        run: Get-ChildItem "apps/desktop/tauri/target/release/bundle/nsis/" | Select-Object Name
+
       - name: Upload to Cloudflare R2 and publish update manifest
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -72,18 +75,28 @@ jobs:
           R2_PUBLIC_URL: ${{ secrets.R2_PUBLIC_URL }}
           TAG: ${{ github.ref_name }}
         run: |
-          $installer = Get-ChildItem "apps/desktop/tauri/target/release/bundle/nsis/*.exe" | Select-Object -First 1
-          $sigFile = "$($installer.FullName).sig"
-          $sig = (Get-Content $sigFile -Raw).Trim()
-          $version = $env:TAG.TrimStart('v')
-          $installerUrl = "$env:R2_PUBLIC_URL/releases/$env:TAG/$($installer.Name)"
+          # Find the .sig file — Tauri v2 may sign .exe or .nsis.zip depending on config
+          $sigFile = Get-ChildItem "apps/desktop/tauri/target/release/bundle/nsis/*.sig" | Select-Object -First 1
+          if (-not $sigFile) {
+            Write-Error "No .sig file found in bundle output. Ensure TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD are set in GitHub Secrets and the updater pubkey is set in tauri.conf.json."
+            exit 1
+          }
 
-          # Upload versioned installer
-          aws s3 cp $installer.FullName "s3://$env:R2_BUCKET/releases/$env:TAG/$($installer.Name)" `
+          # The signed artifact is the file without the .sig extension
+          $artifact = Get-Item ($sigFile.FullName -replace '\.sig$', '')
+          $sig = (Get-Content $sigFile.FullName -Raw).Trim()
+          $version = $env:TAG.TrimStart('v')
+          $artifactUrl = "$env:R2_PUBLIC_URL/releases/$env:TAG/$($artifact.Name)"
+
+          Write-Host "Signed artifact: $($artifact.Name)"
+
+          # Upload versioned artifact (the file the updater will download)
+          aws s3 cp $artifact.FullName "s3://$env:R2_BUCKET/releases/$env:TAG/$($artifact.Name)" `
             --endpoint-url $env:R2_ENDPOINT
 
-          # Upload as latest so the landing page download button has a stable URL
-          aws s3 cp $installer.FullName "s3://$env:R2_BUCKET/releases/latest/vindicta-setup.exe" `
+          # Also upload the bare .exe as a stable latest download for the landing page
+          $exe = Get-ChildItem "apps/desktop/tauri/target/release/bundle/nsis/*.exe" | Select-Object -First 1
+          aws s3 cp $exe.FullName "s3://$env:R2_BUCKET/releases/latest/vindicta-setup.exe" `
             --endpoint-url $env:R2_ENDPOINT
 
           # Generate and upload update manifest consumed by tauri-plugin-updater
@@ -93,7 +106,7 @@ jobs:
             pub_date = (Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ")
             platforms = [ordered]@{
               "windows-x86_64" = [ordered]@{
-                url       = $installerUrl
+                url       = $artifactUrl
                 signature = $sig
               }
             }
