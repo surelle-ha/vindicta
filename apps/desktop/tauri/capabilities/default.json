@@ -162,6 +162,8 @@
     "store:allow-set",
     "store:allow-delete",
     "store:allow-save",
-    "store:allow-load"
+    "store:allow-load",
+    "updater:allow-check",
+    "updater:allow-download-and-install"
   ]
 }

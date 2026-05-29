@@ -2,12 +2,12 @@
 const app = useAppStore()
 const user = useUserStore()
 const projects = useProjectsStore()
+const auth = useAuthStore()
 const router = useRouter()
 
 // Init persisted settings and apply theme before first render
 await app.init()
-await user.load()
-await projects.loadProjects()
+await Promise.all([user.load(), projects.loadProjects(), auth.load()])
 
 // Apply theme to <html> element
 useHead({
@@ -17,11 +17,24 @@ useHead({
 })
 
 // Disable native right-click context menu
+// Secret hotkey: Ctrl+Shift+Alt+S opens Academy Studio
+function handleStudioHotkey(e: KeyboardEvent) {
+  if (e.ctrlKey && e.shiftKey && e.altKey && (e.code === 'KeyS' || e.key.toLowerCase() === 's')) {
+    e.preventDefault()
+    void router.push('/academy-studio')
+  }
+}
+
 onMounted(() => {
   document.addEventListener('contextmenu', (e) => e.preventDefault())
+  window.addEventListener('keydown', handleStudioHotkey)
   if (app.wslAutoStart) {
     void startConfiguredWslBackends()
   }
+})
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleStudioHotkey)
 })
 
 async function onLaunched() {

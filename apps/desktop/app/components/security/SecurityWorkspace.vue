@@ -9,10 +9,12 @@ import {
   ChevronUp,
   Clock3,
   Download,
+  ExternalLink,
   FileJson,
   FileSearch,
   FileText,
   FolderOpen,
+  Github,
   History,
   KeyRound,
   Loader2,
@@ -41,7 +43,7 @@ import type {
 import { createVindictaSecurityDocx } from '~/utils/docx'
 
 type SecurityAITool = 'codex' | 'claude' | 'openrouter' | 'ollama'
-type SecurityWorkspaceTab = 'overview' | 'scanner' | 'findings' | 'dependencies' | 'secrets' | 'reports' | 'history' | 'settings'
+type SecurityWorkspaceTab = 'overview' | 'scanner' | 'findings' | 'dependencies' | 'secrets' | 'reports' | 'history' | 'settings' | 'github_issues'
 type ScanActivityStatus = 'pending' | 'running' | 'done' | 'warning' | 'error'
 
 interface ParsedScanResult {
@@ -82,6 +84,8 @@ const emit = defineEmits<{
 const security = useSecurityStore()
 const aiActivity = useAIActivityStore()
 const app = useAppStore()
+const auth = useAuthStore()
+const projects = useProjectsStore()
 const { notify } = useNotifications()
 
 const query = ref('')
@@ -93,10 +97,109 @@ const selectedScanEffort = ref<SecurityScanEffort>('medium')
 const selectedFindingLimit = ref(10)
 const metricsCollapsed = ref(false)
 const showToolPicker = ref(false)
+const showScopePicker = ref(false)
+const scopeScanAll = ref(true)
+const scopeEntries = ref<{ path: string; name: string; isDir: boolean; depth: number; selected: boolean }[]>([])
+const scopeLoading = ref(false)
 const aiScanRunning = ref(false)
 const creatingRemediation = ref(false)
 const exportingDocs = ref(false)
 const confirmClearFindings = ref(false)
+
+const showGitHubIssueModal = ref(false)
+const ghIssueFinding = ref<SecurityFinding | null>(null)
+const ghIssueCreating = ref(false)
+const ghIssueError = ref('')
+const ghIssueCreatedUrl = ref('')
+
+const ghRepoInput = ref(props.project.githubRepo ?? '')
+const ghRepoSaving = ref(false)
+
+watch(() => props.project.githubRepo, (v) => { ghRepoInput.value = v ?? '' })
+
+async function saveGitHubRepo() {
+  ghRepoSaving.value = true
+  try {
+    await projects.updateProjectMeta(props.project.id, { githubRepo: ghRepoInput.value.trim() || null })
+    notify('GitHub repository saved.', 'success')
+  } catch (e: any) {
+    notify(e?.message ?? 'Could not save repository.', 'error')
+  } finally {
+    ghRepoSaving.value = false
+  }
+}
+
+function openGitHubIssueModal(finding: SecurityFinding) {
+  ghIssueFinding.value = finding
+  ghIssueError.value = ''
+  ghIssueCreatedUrl.value = ''
+  showGitHubIssueModal.value = true
+}
+
+function parseGitHubRepo(repoUrl: string): { owner: string; repo: string } | null {
+  const s = repoUrl.trim()
+  // plain owner/repo
+  const plain = s.match(/^([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)$/)
+  if (plain) return { owner: plain[1]!, repo: plain[2]! }
+  // full https / ssh URL
+  const url = s.match(/github\.com[/:]([^/]+)\/([^/.]+?)(?:\.git)?(?:[/#?].*)?$/)
+  if (url) return { owner: url[1]!, repo: url[2]! }
+  return null
+}
+
+async function submitGitHubIssue() {
+  const finding = ghIssueFinding.value
+  if (!finding) return
+
+  const repoStr = props.project.githubRepo
+  if (!repoStr) {
+    ghIssueError.value = 'No GitHub repository linked to this project. Add one in project settings.'
+    return
+  }
+
+  const parsed = parseGitHubRepo(repoStr)
+  if (!parsed) {
+    ghIssueError.value = 'Could not parse the linked GitHub repository URL.'
+    return
+  }
+
+  ghIssueCreating.value = true
+  ghIssueError.value = ''
+  try {
+    const severityLabel = finding.severity.charAt(0).toUpperCase() + finding.severity.slice(1)
+    const body = [
+      `**Severity:** ${severityLabel}`,
+      `**Area:** ${finding.area}`,
+      `**Category:** ${finding.category}`,
+      '',
+      '## Detail',
+      finding.detail,
+      ...(finding.evidence ? ['', '## Evidence', finding.evidence] : []),
+      '',
+      '## Recommendation',
+      finding.recommendation,
+      '',
+      '---',
+      '_Created by [Vindicta](https://github.com/surelle-ha/vindicta) — AI-powered security platform_',
+    ].join('\n')
+
+    const result = await auth.createGitHubIssue({
+      owner: parsed.owner,
+      repo: parsed.repo,
+      title: `[${severityLabel}] ${finding.title}`,
+      body,
+      labels: ['security', finding.severity],
+    })
+    ghIssueCreatedUrl.value = result.htmlUrl
+    notify(`GitHub issue #${result.number} created.`, 'success')
+    ghIssuesLoadedForRepo = null
+    void loadGitHubIssues()
+  } catch (e: any) {
+    ghIssueError.value = e?.message ?? 'Failed to create GitHub issue.'
+  } finally {
+    ghIssueCreating.value = false
+  }
+}
 
 async function clearAllFindingsConfirmed() {
   await security.clearAllFindings()
@@ -115,6 +218,78 @@ const scanActivity = ref<ScanActivityItem[]>([])
 let scanActivityTimer: ReturnType<typeof setInterval> | null = null
 let activeSecurityJobId: string | null = null
 let autoScanStartedForProject: string | null = null
+
+interface GitHubIssue {
+  number: number
+  title: string
+  body: string | null
+  state: 'open' | 'closed'
+  htmlUrl: string
+  createdAt: string
+  updatedAt: string
+  labels: { name: string; color: string }[]
+  user: { login: string; avatarUrl: string } | null
+}
+
+const ghIssues = ref<GitHubIssue[]>([])
+const ghIssuesLoading = ref(false)
+const ghIssuesError = ref('')
+const ghIssuesFilter = ref<'open' | 'closed' | 'all'>('open')
+let ghIssuesLoadedForRepo: string | null = null
+
+const filteredGhIssues = computed(() => {
+  if (ghIssuesFilter.value === 'all') return ghIssues.value
+  return ghIssues.value.filter(issue => issue.state === ghIssuesFilter.value)
+})
+
+async function loadGitHubIssues(force = false) {
+  const repoUrl = props.project.githubRepo
+  if (!repoUrl || !auth.githubToken) return
+
+  if (!force && ghIssuesLoadedForRepo === repoUrl) return
+  ghIssuesLoading.value = true
+  ghIssuesError.value = ''
+  try {
+    const parsed = parseGitHubRepo(repoUrl)
+    if (!parsed) throw new Error('Could not parse the linked GitHub repository URL.')
+    const { owner, repo } = parsed
+    const resp = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues?state=all&per_page=100`, {
+      headers: {
+        Authorization: `Bearer ${auth.githubToken}`,
+        Accept: 'application/vnd.github+json',
+      },
+    })
+    if (!resp.ok) {
+      const msg = (await resp.json().catch(() => null) as Record<string, unknown> | null)?.message
+      throw new Error(typeof msg === 'string' ? msg : `GitHub API error: ${resp.status}`)
+    }
+    const data = await resp.json() as Record<string, unknown>[]
+    ghIssues.value = data
+      .filter(item => !item.pull_request)
+      .map(item => ({
+        number: item.number as number,
+        title: item.title as string,
+        body: (item.body as string | null) ?? null,
+        state: item.state as 'open' | 'closed',
+        htmlUrl: item.html_url as string,
+        createdAt: item.created_at as string,
+        updatedAt: item.updated_at as string,
+        labels: ((item.labels ?? []) as Record<string, unknown>[]).map(l => ({
+          name: l.name as string,
+          color: l.color as string,
+        })),
+        user: item.user ? {
+          login: (item.user as Record<string, unknown>).login as string,
+          avatarUrl: (item.user as Record<string, unknown>).avatar_url as string,
+        } : null,
+      }))
+    ghIssuesLoadedForRepo = repoUrl
+  } catch (e: any) {
+    ghIssuesError.value = e?.message ?? 'Failed to load GitHub issues.'
+  } finally {
+    ghIssuesLoading.value = false
+  }
+}
 
 function securityToolLabel(tool: SecurityAITool) {
   if (tool === 'claude') return 'Claude'
@@ -143,7 +318,7 @@ function buildScanStageTemplates(tool: SecurityAITool) {
     ? `Sending the read-only security prompt to the configured ${toolLabel} model.`
     : `Launching ${toolLabel} CLI in read-only mode for the selected project.`
   return [
-    { id: 'scope', label: 'Preparing scan scope', detail: 'Building a read-only security prompt for OWASP, configuration, dependency, secret, API, and Tauri review.' },
+    { id: 'scope', label: 'Preparing scan scope', detail: 'Building a read-only security prompt for OWASP, configuration, dependency, secret, API, and desktop security review.' },
     { id: 'launch', label: `Starting ${toolLabel}`, detail: launchDetail },
     { id: 'inspect', label: 'Inspecting project files', detail: 'Reviewing source, configuration, auth boundaries, shell usage, data access, and local trust boundaries.' },
     { id: 'risk-map', label: 'Mapping risks', detail: 'Grouping concrete issues by severity, abuse path, evidence, and risk family.' },
@@ -164,7 +339,7 @@ const scanEffortOptions: { value: SecurityScanEffort; label: string; detail: str
     value: 'medium',
     label: 'Balanced',
     detail: 'Default review depth for normal project checks.',
-    focus: 'Review core source, configuration, API boundaries, dependency risk, Tauri permissions, and frontend trust boundaries with balanced depth.',
+    focus: 'Review core source, configuration, API boundaries, dependency risk, desktop app permissions, and frontend trust boundaries with balanced depth.',
     tokenNote: 'Moderate token use',
   },
   {
@@ -269,6 +444,9 @@ watch(() => props.tab, async (tab) => {
   if (tab === 'dependencies' && !dependencyLoading.value && !dependencyInventory.value.length) {
     await scanDependencies(false)
   }
+  if (tab === 'github_issues') {
+    await loadGitHubIssues()
+  }
 })
 
 watch(() => aiActivity.jobs, () => {
@@ -285,12 +463,31 @@ onUnmounted(() => {
   stopScanActivityTimer()
 })
 
+async function detectAndSaveGitHubRepo() {
+  if (props.project.githubRepo || !props.project.absolutePath) return
+  try {
+    const fs = useTauriFs()
+    const sep = props.project.absolutePath.includes('\\') ? '\\' : '/'
+    const gitConfigPath = `${props.project.absolutePath}${sep}.git${sep}config`
+    const text = await fs.readTextFile(gitConfigPath).catch(() => '')
+    if (!text) return
+    const urlMatch = text.match(/\[remote\s+"origin"\][^\[]*url\s*=\s*([^\r\n]+)/s)
+    if (!urlMatch) return
+    const rawUrl = urlMatch[1]!.trim()
+    const ghMatch = rawUrl.match(/github\.com[/:]([^/]+)\/([^/.]+?)(?:\.git)?$/)
+    if (!ghMatch) return
+    const repoSlug = `${ghMatch[1]}/${ghMatch[2]}`
+    await projects.updateProjectMeta(props.project.id, { githubRepo: repoSlug })
+  } catch { /* git config unreadable — not a git repo or no origin */ }
+}
+
 async function initializeWorkspace() {
   await aiActivity.load()
   await security.load(props.project.absolutePath, props.project.id)
   activeScanId.value = security.latestScan?.id ?? null
   selectedFindingLimit.value = security.settings.aiFindingLimit
   restoreActiveSecurityJob()
+  void detectAndSaveGitHubRepo()
   await Promise.allSettled([scanDependencies(false), scanSecrets(false), scanConfig()])
   if (security.shouldAutoScan() && autoScanStartedForProject !== props.project.id && !hasRunningSecurityJob()) {
     autoScanStartedForProject = props.project.id
@@ -312,6 +509,61 @@ function openAIScanPicker() {
   scanError.value = null
   selectedAITool.value = 'codex'
   showToolPicker.value = true
+}
+
+async function openScopePicker() {
+  showToolPicker.value = false
+  scopeScanAll.value = true
+  scopeEntries.value = []
+  showScopePicker.value = true
+  await loadScopeTree()
+}
+
+async function loadScopeTree() {
+  if (!props.project.absolutePath) return
+  scopeLoading.value = true
+  const fs = useTauriFs()
+  const ignored = new Set(['.git', 'node_modules', 'dist', '.nuxt', '.output', 'target', 'build', '.cache', 'bin', 'obj', '__pycache__', '.venv', 'venv'])
+  const entries: typeof scopeEntries.value = []
+
+  async function collect(dir: string, depth: number) {
+    if (depth > 2) return
+    const items = await fs.readDir(dir).catch(() => [])
+    for (const item of items) {
+      if (ignored.has(item.name)) continue
+      entries.push({ path: item.path, name: item.name, isDir: item.isDir, depth, selected: true })
+      if (item.isDir && depth < 2) await collect(item.path, depth + 1)
+    }
+  }
+
+  await collect(props.project.absolutePath, 0)
+  scopeEntries.value = entries
+  scopeLoading.value = false
+}
+
+function buildScopeConstraint(): string {
+  if (scopeScanAll.value) return ''
+  const sep = props.project.absolutePath.includes('\\') ? '\\' : '/'
+  const base = props.project.absolutePath
+  const selected = scopeEntries.value
+    .filter(e => e.selected && e.depth === 0)
+    .map(e => e.path.replace(base + sep, '').replace(base + '/', ''))
+  if (!selected.length) return ''
+  return `\n\nScope constraint — focus ONLY on these paths:\n${selected.map(p => `- ${p}`).join('\n')}\nIgnore everything else unless it is a direct dependency of the scoped paths.`
+}
+
+function toggleScopeParent(entry: { path: string; isDir: boolean; depth: number; selected: boolean }) {
+  const newVal = !entry.selected
+  entry.selected = newVal
+  if (entry.isDir) {
+    const prefix1 = entry.path + '/'
+    const prefix2 = entry.path + '\\'
+    for (const child of scopeEntries.value) {
+      if (child.path.startsWith(prefix1) || child.path.startsWith(prefix2)) {
+        child.selected = newVal
+      }
+    }
+  }
 }
 
 function scrollToReport() {
@@ -455,7 +707,7 @@ ${limitInstruction}
 
 Scope:
 - OWASP Top 10 style issues, especially injection, broken access control, auth/session mistakes, insecure configuration, SSRF/path traversal, unsafe deserialization, vulnerable dependency patterns, and secrets handling.
-- Desktop/Tauri risks such as shell execution, filesystem permissions, command argument handling, and unsafe local privilege boundaries.
+- Desktop app risks such as shell execution, filesystem permissions, command argument handling, and unsafe local privilege boundaries.
 - API/backend risks such as tenant isolation, authorization checks, input validation, CORS, and persistence boundaries.
 - Frontend risks such as unsafe HTML rendering, token exposure, secret leakage, and trust boundary mistakes.
 
@@ -624,7 +876,8 @@ async function runAIScan(effortOverride?: SecurityScanEffort, automatic = false)
   if (!automatic) emit('changeTab', 'scanner')
 
   try {
-    const prompt = buildSecurityScanPrompt(props.project.name, buildExistingSecurityContext(), effort, findingLimit)
+    const scopeConstraint = automatic ? '' : buildScopeConstraint()
+    const prompt = buildSecurityScanPrompt(props.project.name, buildExistingSecurityContext(), effort, findingLimit) + scopeConstraint
 
     let result: { stdout: string; stderr: string }
     if (tool === 'openrouter') {
@@ -1094,7 +1347,7 @@ async function scanConfig() {
     {
       label: 'Desktop permissions',
       status: tauriConfigExists ? 'info' : 'ok',
-      detail: tauriConfigExists ? 'Tauri configuration detected. Review capabilities and shell permissions during AI scans.' : 'No Tauri desktop configuration detected at the default path.',
+      detail: tauriConfigExists ? 'Desktop configuration detected. Review capabilities and shell permissions during AI scans.' : 'No desktop configuration detected at the default path.',
     },
     {
       label: 'Automatic scan',
@@ -1384,6 +1637,10 @@ async function clearScanHistory() {
                 <p class="text-[10px] uppercase tracking-wider text-[var(--text-faint)]">Area</p>
                 <p class="mt-1 truncate text-xs text-[var(--text-muted)]">{{ finding.area }}</p>
               </div>
+              <button v-if="auth.isGitHubConnected" class="flex w-full items-center justify-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-[var(--text-muted)] transition-colors hover:border-white/20 hover:bg-white/[0.07] hover:text-[var(--text)]" @click="openGitHubIssueModal(finding)">
+                <Github class="size-3.5" />
+                Create Issue
+              </button>
             </div>
           </div>
           <div class="mt-3 flex items-start gap-2 rounded-lg border border-indigo-500/15 bg-indigo-500/[0.06] p-3">
@@ -1496,6 +1753,83 @@ async function clearScanHistory() {
       </div>
     </section>
 
+    <section v-else-if="tab === 'github_issues'" class="rounded-xl border border-[var(--border)] bg-[var(--bg-card)]">
+      <div class="flex flex-col gap-3 border-b border-[var(--border)] p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div class="flex items-center gap-2">
+          <Github class="size-4 text-[var(--text-muted)]" />
+          <div>
+            <h2 class="text-sm font-semibold text-[var(--text)]">GitHub Issues</h2>
+            <p v-if="project.githubRepo" class="mt-0.5 font-mono text-[10px] text-[var(--text-faint)]">{{ project.githubRepo }}</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <div class="flex rounded-lg border border-[var(--border)] text-xs overflow-hidden">
+            <button v-for="f in (['open', 'closed', 'all'] as const)" :key="f" class="px-3 py-1.5 capitalize transition-colors" :class="ghIssuesFilter === f ? 'bg-white/[0.08] text-[var(--text)]' : 'text-[var(--text-faint)] hover:text-[var(--text-muted)]'" @click="ghIssuesFilter = f">{{ f }}</button>
+          </div>
+          <button class="flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs text-[var(--text-muted)] hover:bg-white/[0.05]" :disabled="ghIssuesLoading" @click="loadGitHubIssues(true)">
+            <Loader2 v-if="ghIssuesLoading" class="size-3.5 animate-spin" />
+            <History v-else class="size-3.5" />
+            Refresh
+          </button>
+        </div>
+      </div>
+
+      <div v-if="!project.githubRepo" class="px-4 py-12 text-center">
+        <Github class="mx-auto size-6 text-[var(--text-faint)]" />
+        <p class="mt-3 text-sm font-medium text-[var(--text)]">No repository linked</p>
+        <p class="mt-1 text-xs text-[var(--text-muted)]">Link a GitHub repository to this project to browse and create issues.</p>
+        <div class="mx-auto mt-4 flex max-w-sm items-center gap-2">
+          <input v-model="ghRepoInput" class="h-9 flex-1 rounded-lg border border-[var(--border)] bg-black/20 px-3 text-xs text-[var(--text)] outline-none placeholder:text-[var(--text-faint)] focus:border-white/20" placeholder="owner/repo or full GitHub URL" @keydown.enter="saveGitHubRepo">
+          <button class="flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/[0.06] px-3 py-2 text-xs text-[var(--text-muted)] hover:bg-white/[0.1] disabled:opacity-40" :disabled="ghRepoSaving || !ghRepoInput.trim()" @click="saveGitHubRepo">
+            <Loader2 v-if="ghRepoSaving" class="size-3.5 animate-spin" />
+            <Check v-else class="size-3.5" />
+            Save
+          </button>
+        </div>
+        <p class="mt-2 text-[10px] text-[var(--text-faint)]">You can also set this in the Settings tab.</p>
+      </div>
+
+      <template v-else>
+      <div v-if="ghIssuesError" class="m-4 rounded-lg border border-red-500/20 bg-red-500/[0.07] px-3 py-2.5 text-xs text-red-300">
+        {{ ghIssuesError }}
+      </div>
+
+      <div v-else-if="ghIssuesLoading && !ghIssues.length" class="px-4 py-14 text-center text-sm text-[var(--text-muted)]">
+        <Loader2 class="mx-auto size-5 animate-spin text-[var(--text-faint)]" />
+        <p class="mt-3">Loading issues...</p>
+      </div>
+
+      <div v-else class="divide-y divide-[var(--border)]">
+        <article v-for="issue in filteredGhIssues" :key="issue.number" class="flex items-start gap-3 px-4 py-4">
+          <div class="mt-0.5 shrink-0">
+            <div class="flex size-5 items-center justify-center rounded-full border text-[9px] font-bold" :class="issue.state === 'open' ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400' : 'border-white/10 bg-white/[0.04] text-[var(--text-faint)]'">
+              {{ issue.state === 'open' ? '●' : '✓' }}
+            </div>
+          </div>
+          <div class="min-w-0 flex-1">
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="font-mono text-[10px] text-[var(--text-faint)]">#{{ issue.number }}</span>
+              <span v-for="label in issue.labels" :key="label.name" class="rounded-full px-1.5 py-0.5 text-[9px] font-semibold" :style="{ backgroundColor: `#${label.color}22`, color: `#${label.color}`, borderColor: `#${label.color}44`, borderWidth: '1px', borderStyle: 'solid' }">{{ label.name }}</span>
+            </div>
+            <p class="mt-1 text-xs font-medium text-[var(--text)]">{{ issue.title }}</p>
+            <p v-if="issue.body" class="mt-1 line-clamp-2 text-[11px] leading-relaxed text-[var(--text-muted)]">{{ issue.body.replace(/\n+/g, ' ').trim() }}</p>
+            <div class="mt-2 flex items-center gap-3 text-[10px] text-[var(--text-faint)]">
+              <span v-if="issue.user">{{ issue.user.login }}</span>
+              <span>opened {{ new Date(issue.createdAt).toLocaleDateString() }}</span>
+              <a :href="issue.htmlUrl" target="_blank" class="flex items-center gap-0.5 hover:text-[var(--text-muted)]">
+                <ExternalLink class="size-2.5" />
+                View
+              </a>
+            </div>
+          </div>
+        </article>
+        <div v-if="!filteredGhIssues.length && !ghIssuesLoading" class="px-4 py-14 text-center text-sm text-[var(--text-muted)]">
+          No {{ ghIssuesFilter === 'all' ? '' : ghIssuesFilter + ' ' }}issues found.
+        </div>
+      </div>
+      </template>
+    </section>
+
     <section v-else-if="tab === 'settings'" class="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-4">
       <div class="flex items-center gap-2">
         <Settings class="size-4 text-indigo-300" />
@@ -1535,6 +1869,23 @@ async function clearScanHistory() {
           <input :value="security.settings.aiFindingLimit" type="number" min="0" max="50" class="mt-2 h-9 w-full rounded-lg border border-[var(--border)] bg-black/20 px-2 text-xs text-[var(--text)] outline-none" @change="security.updateSettings({ aiFindingLimit: Math.max(0, Math.min(50, Math.floor(Number(($event.target as HTMLInputElement).value) || 0))) })">
           <span class="mt-2 block text-[10px] leading-relaxed text-[var(--text-faint)]">Use 0 to remove the explicit cap from the AI prompt. Manual scans can override this in the run modal.</span>
         </label>
+      </div>
+
+      <!-- GitHub integration -->
+      <div v-if="auth.isGitHubConnected" class="mt-4 rounded-xl border border-[var(--border)] bg-black/10 p-4">
+        <div class="flex items-center gap-2">
+          <Github class="size-3.5 text-[var(--text-muted)]" />
+          <span class="text-xs font-medium text-[var(--text)]">GitHub Repository</span>
+        </div>
+        <p class="mt-1 text-[11px] text-[var(--text-muted)]">Link a repository to enable issue creation and the Issues tab.</p>
+        <div class="mt-2 flex items-center gap-2">
+          <input v-model="ghRepoInput" class="h-9 flex-1 rounded-lg border border-[var(--border)] bg-black/20 px-3 text-xs text-[var(--text)] outline-none placeholder:text-[var(--text-faint)] focus:border-white/20" placeholder="owner/repo or full GitHub URL" @keydown.enter="saveGitHubRepo">
+          <button class="flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/[0.06] px-3 py-2 text-xs text-[var(--text-muted)] hover:bg-white/[0.1] disabled:opacity-40" :disabled="ghRepoSaving" @click="saveGitHubRepo">
+            <Loader2 v-if="ghRepoSaving" class="size-3.5 animate-spin" />
+            <Check v-else class="size-3.5" />
+            Save
+          </button>
+        </div>
       </div>
 
       <!-- Danger zone -->
@@ -1639,6 +1990,16 @@ async function clearScanHistory() {
               </p>
             </div>
           </button>
+          <div class="flex w-full cursor-not-allowed items-center gap-3 rounded-xl border border-[var(--border)] bg-black/10 px-4 py-3 opacity-50">
+            <div class="grid size-9 place-items-center rounded-lg border border-rose-500/30 bg-rose-500/15 text-sm font-semibold text-rose-200">C</div>
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-2">
+                <p class="text-sm font-semibold text-[var(--text)]">Core AI</p>
+                <span class="rounded-full border border-rose-500/25 bg-rose-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-rose-300">Soon</span>
+              </div>
+              <p class="mt-0.5 text-xs text-[var(--text-muted)]">Vindicta's native AI model — currently in training.</p>
+            </div>
+          </div>
         </div>
         <div class="space-y-2">
           <p class="text-xs font-medium text-[var(--text-muted)]">Effort Level</p>
@@ -1660,9 +2021,140 @@ async function clearScanHistory() {
         </label>
         <div class="flex justify-end gap-2 border-t border-[var(--border)] pt-4">
           <button class="rounded-lg border border-[var(--border)] px-3 py-2 text-xs font-medium text-[var(--text-muted)] hover:text-[var(--text)]" @click="showToolPicker = false">Cancel</button>
-          <button class="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-50" :class="securityToolRunButtonClass(selectedAITool)" :disabled="!canRunAIScan" @click="runAIScan()">
+          <button class="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-50" :class="securityToolRunButtonClass(selectedAITool)" :disabled="!canRunAIScan" @click="openScopePicker">
+            <FileSearch class="size-3.5" />
+            Select Scope →
+          </button>
+        </div>
+      </div>
+    </GlassModal>
+
+    <GlassModal v-model="showScopePicker" title="Select Scan Scope" max-width="lg">
+      <div class="space-y-4">
+        <!-- Scan all toggle -->
+        <div class="flex items-center justify-between rounded-xl border border-[var(--border)] bg-black/10 px-4 py-3">
+          <div>
+            <p class="text-xs font-semibold text-[var(--text)]">Scan everything</p>
+            <p class="mt-0.5 text-[11px] text-[var(--text-muted)]">Include all project files. Disable to select specific paths.</p>
+          </div>
+          <button
+            class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors"
+            :class="scopeScanAll ? 'bg-indigo-500' : 'bg-white/10'"
+            @click="scopeScanAll = !scopeScanAll"
+          >
+            <span class="inline-block size-4 translate-x-0 rounded-full bg-white shadow transition-transform" :class="scopeScanAll ? 'translate-x-4' : 'translate-x-0'" />
+          </button>
+        </div>
+
+        <!-- File tree -->
+        <div v-if="!scopeScanAll" class="space-y-1">
+          <div class="flex items-center justify-between">
+            <p class="text-[10px] font-semibold uppercase tracking-widest text-[var(--text-faint)]">Project paths</p>
+            <div class="flex gap-2">
+              <button class="text-[10px] text-indigo-400 hover:text-indigo-300" @click="scopeEntries.forEach(e => e.selected = true)">Select all</button>
+              <span class="text-[10px] text-[var(--text-faint)]">·</span>
+              <button class="text-[10px] text-[var(--text-faint)] hover:text-[var(--text-muted)]" @click="scopeEntries.forEach(e => e.selected = false)">None</button>
+            </div>
+          </div>
+
+          <div v-if="scopeLoading" class="flex items-center gap-2 py-6 text-xs text-[var(--text-muted)]">
+            <Loader2 class="size-3.5 animate-spin" /> Loading project structure...
+          </div>
+
+          <div v-else class="max-h-72 overflow-y-auto rounded-xl border border-[var(--border)] bg-black/10 custom-scroll">
+            <label
+              v-for="entry in scopeEntries"
+              :key="entry.path"
+              class="flex cursor-pointer items-center gap-2 border-b border-[var(--border)]/50 px-3 py-2 last:border-0 hover:bg-white/[0.03]"
+              :style="{ paddingLeft: `${12 + entry.depth * 16}px` }"
+            >
+              <input
+                type="checkbox"
+                class="size-3.5 rounded accent-indigo-500"
+                :checked="entry.selected"
+                @change="entry.isDir ? toggleScopeParent(entry) : (entry.selected = !entry.selected)"
+              >
+              <FolderOpen v-if="entry.isDir" class="size-3.5 shrink-0 text-amber-400/70" />
+              <FileText v-else class="size-3.5 shrink-0 text-[var(--text-faint)]" />
+              <span class="truncate text-xs" :class="entry.selected ? 'text-[var(--text)]' : 'text-[var(--text-faint)] line-through'">{{ entry.name }}</span>
+            </label>
+            <div v-if="!scopeEntries.length && !scopeLoading" class="px-3 py-6 text-center text-xs text-[var(--text-muted)]">No files found.</div>
+          </div>
+
+          <p class="text-[10px] text-[var(--text-faint)]">
+            {{ scopeEntries.filter(e => e.selected && e.depth === 0).length }} of {{ scopeEntries.filter(e => e.depth === 0).length }} top-level paths selected
+          </p>
+        </div>
+
+        <div class="flex justify-end gap-2 border-t border-[var(--border)] pt-3">
+          <button class="rounded-lg border border-[var(--border)] px-3 py-2 text-xs font-medium text-[var(--text-muted)] hover:text-[var(--text)]" @click="showScopePicker = false; showToolPicker = true">← Back</button>
+          <button
+            class="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+            :class="securityToolRunButtonClass(selectedAITool)"
+            :disabled="!canRunAIScan || scopeLoading"
+            @click="showScopePicker = false; runAIScan()"
+          >
             <Bot class="size-3.5" />
             Run {{ selectedEffortOption.label }} Scan with {{ selectedAIToolLabel }}
+          </button>
+        </div>
+      </div>
+    </GlassModal>
+
+    <GlassModal v-model="showGitHubIssueModal" title="Create GitHub Issue" max-width="md">
+      <div v-if="ghIssueFinding" class="space-y-4">
+        <div class="rounded-lg border border-[var(--border)] bg-black/10 p-3">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="rounded-full border px-2 py-0.5 text-[10px] font-medium capitalize" :class="severityClasses[ghIssueFinding.severity]">{{ ghIssueFinding.severity }}</span>
+            <span class="text-xs font-medium text-[var(--text)]">{{ ghIssueFinding.title }}</span>
+          </div>
+          <p class="mt-1.5 text-[11px] text-[var(--text-muted)]">{{ ghIssueFinding.area }}</p>
+        </div>
+
+        <div v-if="project.githubRepo" class="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2.5 text-xs text-[var(--text-muted)]">
+          <p class="font-medium text-[var(--text)]">Repository</p>
+          <p class="mt-0.5 font-mono text-[11px]">{{ project.githubRepo }}</p>
+        </div>
+        <div v-else class="space-y-1.5">
+          <p class="text-xs font-medium text-[var(--text)]">Repository</p>
+          <div class="flex items-center gap-2">
+            <input v-model="ghRepoInput" class="h-9 flex-1 rounded-lg border border-[var(--border)] bg-black/20 px-3 text-xs text-[var(--text)] outline-none placeholder:text-[var(--text-faint)] focus:border-white/20" placeholder="owner/repo or full GitHub URL" @keydown.enter="saveGitHubRepo">
+            <button class="flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/[0.06] px-3 py-2 text-xs text-[var(--text-muted)] hover:bg-white/[0.1] disabled:opacity-40" :disabled="ghRepoSaving || !ghRepoInput.trim()" @click="saveGitHubRepo">
+              <Loader2 v-if="ghRepoSaving" class="size-3.5 animate-spin" />
+              <Check v-else class="size-3.5" />
+              Save
+            </button>
+          </div>
+          <p class="text-[10px] text-amber-400">No repository linked — save one above to create the issue.</p>
+        </div>
+
+        <p class="text-xs text-[var(--text-muted)]">
+          The issue will be created on the linked repository with the finding details and a "Created by Vindicta" attribution. It will appear under your GitHub account.
+        </p>
+
+        <div v-if="ghIssueCreatedUrl" class="flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/[0.07] px-3 py-2.5">
+          <CheckCircle2 class="size-3.5 shrink-0 text-emerald-400" />
+          <div class="min-w-0">
+            <p class="text-xs font-medium text-emerald-300">Issue created successfully</p>
+            <a :href="ghIssueCreatedUrl" target="_blank" class="mt-0.5 flex items-center gap-1 text-[11px] text-emerald-400/70 hover:text-emerald-300">
+              <ExternalLink class="size-3" />
+              View on GitHub
+            </a>
+          </div>
+        </div>
+
+        <div v-if="ghIssueError" class="rounded-lg border border-red-500/20 bg-red-500/[0.07] px-3 py-2.5 text-xs text-red-300">
+          {{ ghIssueError }}
+        </div>
+
+        <div class="flex items-center justify-end gap-2 pt-1">
+          <button class="rounded-lg border border-[var(--border)] px-4 py-2 text-xs text-[var(--text-muted)] hover:bg-white/[0.05]" @click="showGitHubIssueModal = false">
+            {{ ghIssueCreatedUrl ? 'Close' : 'Cancel' }}
+          </button>
+          <button v-if="!ghIssueCreatedUrl" class="flex items-center gap-1.5 rounded-lg bg-gray-700 px-4 py-2 text-xs font-medium text-white hover:bg-gray-600 disabled:cursor-not-allowed disabled:opacity-50" :disabled="ghIssueCreating || !project.githubRepo" @click="submitGitHubIssue">
+            <Loader2 v-if="ghIssueCreating" class="size-3.5 animate-spin" />
+            <Github v-else class="size-3.5" />
+            {{ ghIssueCreating ? 'Creating…' : 'Create Issue' }}
           </button>
         </div>
       </div>

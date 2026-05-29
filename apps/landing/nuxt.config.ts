@@ -4,6 +4,15 @@ export default defineNuxtConfig({
   compatibilityDate: '2025-05-12',
   ssr: true,
   modules: [],
+  runtimeConfig: {
+    databaseUrl:  process.env.DATABASE_URL  ?? '',
+    resendApiKey: process.env.RESEND_API_KEY ?? '',
+    fromEmail:    process.env.FROM_EMAIL     ?? 'Vindicta <noreply@vindicta.surelle.xyz>',
+    public: {
+      apiUrl:  process.env.NUXT_PUBLIC_API_URL ?? '',
+      siteUrl: process.env.NUXT_PUBLIC_SITE_URL ?? 'https://vindicta.surelle.xyz',
+    },
+  },
   css: ['~/assets/css/main.css'],
   app: {
     head: {

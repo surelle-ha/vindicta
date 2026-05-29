@@ -9,24 +9,16 @@
     <div class="flex items-center gap-4 text-[13px] text-white/50 sm:gap-6">
       <NuxtLink to="/#features" class="hidden transition-colors hover:text-white sm:inline">Features</NuxtLink>
       <NuxtLink to="/#academy" class="hidden transition-colors hover:text-white sm:inline">Academy</NuxtLink>
-      <NuxtLink to="/download" class="hidden transition-colors hover:text-white sm:inline">Download</NuxtLink>
       <NuxtLink to="/docs" class="hidden transition-colors hover:text-white md:inline">Docs</NuxtLink>
-      <a
-        href="https://github.com/surelle-ha/vindicta"
-        target="_blank"
-        rel="noopener"
-        class="transition-colors hover:text-white"
-      >
-        GitHub
-      </a>
+      <NuxtLink to="/support" class="hidden transition-colors hover:text-white md:inline">Support</NuxtLink>
       <NuxtLink
-        to="/download"
+        to="/beta"
         class="hidden items-center gap-1.5 rounded-lg bg-accent px-4 py-1.5 text-[12px] font-semibold text-white transition hover:bg-accent/90 active:scale-[0.98] sm:flex"
       >
         <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
         </svg>
-        Download
+        Join Beta
       </NuxtLink>
     </div>
   </nav>

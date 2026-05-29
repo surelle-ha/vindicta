@@ -1,89 +1,94 @@
 # AGENT.md
 
-This file is for Codex and other coding agents working in this repository.
+This file is for Codex, Claude, and other coding agents working in this repository.
 
 ## Project Summary
 
-Vindicta is a local-first project management and AI engineering workspace. The main product is `apps/desktop`, a Nuxt 4 + Tauri 2 desktop app that manages local projects through `vindicta.json` files and integrates with Codex CLI for analysis, security checks, README/docs generation, and sprint handovers.
+Vindicta is a **local-first AI-powered security platform** built as a Nuxt 4 + Tauri 2 desktop app. It provides:
+
+- **Security Workspace**: AI-driven project scanning (OWASP, secrets, dependencies, config), findings management, and DOCX report export
+- **Academy**: 30-day structured security curriculum with an AI professor agent, mermaid whiteboard, WSL practice terminal, and Kokoro TTS narration
+- **AI Models**: Setup and status for Claude Code CLI, Codex CLI, OpenRouter API, Ollama local server, and Kokoro TTS
+- **Pentest**: Red/Blue team workspace backed by WSL profiles
+- **GitHub Integration**: OAuth via Device Flow, repo cloning, issue creation from security findings
 
 There are also two secondary apps:
-
-- `apps/api`: NestJS API prototype using TypeORM/Postgres modules for tenants, users, projects, tickets, roles, and auth.
-- `apps/landing`: Nuxt landing page.
+- `apps/landing`: Nuxt landing page
+- `apps/api`: NestJS API prototype (not actively developed)
 
 ## Commands
 
-Use these from the repository root:
+From the repository root:
 
 ```bash
-pnpm --filter @vindicta/desktop build
-pnpm --filter @vindicta/desktop tauri:build
-pnpm --filter @vindicta/desktop dev
-pnpm app:dev
-pnpm api:dev
-pnpm landing:dev
+pnpm desktop:dev                              # Nuxt dev server (browser)
+pnpm --filter @vindicta/desktop tauri:dev     # Full Tauri native window
+pnpm --filter @vindicta/desktop build         # Build check (fastest verification)
+pnpm landing:dev                              # Landing page dev
 ```
 
-The normal verification command for desktop source changes is:
+## Architecture
 
-```bash
-pnpm --filter @vindicta/desktop build
+### Frontend
+- **Framework**: Nuxt 4, Vue 3 Composition API (`<script setup lang="ts">`), Tailwind CSS v4
+- **State**: Pinia stores in `apps/desktop/app/stores/`
+- **Routing**: File-based Nuxt routing; `pages/projects/[id].vue` is the main workspace
+- **Icons**: lucide-vue-next exclusively
+
+### Desktop
+- **Runtime**: Tauri 2 — WebView2 (Windows) renders the Nuxt app; Rust backend handles shell, filesystem, and native APIs
+- **Persistence**: Tauri plugin-store (`.bin` files) via `useTauriStore`; localStorage fallback in browser dev
+- **Shell allowlist**: `apps/desktop/tauri/capabilities/default.json` — all `Command.create()` calls must be listed here
+
+### Key Files
+
+| Path | Purpose |
+|------|---------|
+| `apps/desktop/app/pages/projects/[id].vue` | Main workspace shell — tabs, project header |
+| `apps/desktop/app/components/security/SecurityWorkspace.vue` | All security tab content and AI scan logic |
+| `apps/desktop/app/pages/academy.vue` | Academy learning UI, TTS, whiteboard state |
+| `apps/desktop/app/components/academy/AIProfessorChat.vue` | Professor agent chat with quiz parsing |
+| `apps/desktop/app/components/academy/AcademyWhiteboard.vue` | Mermaid diagram renderer (top drawer) |
+| `apps/desktop/app/stores/app.ts` | Global app settings (openRouter, ollama, wslProfiles, rssSources…) |
+| `apps/desktop/app/stores/auth.ts` | GitHub OAuth state, `createGitHubIssue()` |
+| `apps/desktop/app/stores/academy.ts` | Academy progress, chat sessions, AI model preference |
+| `apps/desktop/app/stores/security.ts` | Security findings, scans, secrets, dependencies |
+| `apps/desktop/app/data/curriculum.ts` | Academy lesson/week/module definitions |
+| `apps/desktop/app/composables/useClaudeShell.ts` | Claude CLI streaming wrapper |
+| `apps/desktop/app/composables/useCodexShell.ts` | Codex CLI exec wrapper |
+| `apps/desktop/app/composables/useOpenRouterAI.ts` | OpenRouter REST API |
+| `apps/desktop/app/composables/useOllamaAI.ts` | Ollama OpenAI-compat REST API |
+| `apps/desktop/app/composables/useAcademyTTS.ts` | TTS orchestration (script gen + Kokoro synthesis + cache) |
+| `apps/desktop/app/workers/kokoro.worker.ts` | ONNX TTS inference Web Worker |
+| `apps/desktop/tauri/src/` | Rust commands: `download_to_temp`, `wsl_*`, `github_*` |
+
+## AI Integration Conventions
+
+All AI model integrations expose a single async function from a composable:
+
+```ts
+// Pattern: composables/useFooAI.ts
+export async function runFooChat(opts: FooOptions): Promise<string>
 ```
 
-Nuxt build warnings about sourcemaps and dynamic imports may appear; they are currently known warnings unless the changed code introduces a new failure.
-
-## Architecture Notes
-
-- `apps/desktop/app/pages`: route-level screens.
-- `apps/desktop/app/components/project`: project workspace UI.
-- `apps/desktop/app/components/ai`: AI workspace and activity UI.
-- `apps/desktop/app/stores`: Pinia stores for app settings, projects, Kanban tickets, sprints, users, notifications, and AI activity.
-- `apps/desktop/app/composables`: Tauri wrappers, Codex/Claude shell helpers, project guide, and `vindicta.json` persistence.
-- `apps/desktop/app/types/vindicta.ts`: TypeScript model for project data.
-- `schema/v7.json`: JSON Schema for `vindicta.json`.
-- `apps/desktop/tauri/capabilities/default.json`: Tauri permissions and shell command allowlist.
-
-## Data Model
-
-Per-project state is stored in the target project folder as `vindicta.json`. It contains metadata, settings, members, tickets, sprints, and history. Use `useVindictaJson()` for reads/writes so migrations and schema defaults remain centralized.
-
-Use existing stores for user-facing changes:
-
-- `useKanbanStore()` for ticket creation, movement, comments, updates, deletion, and ticket history.
-- `useSprintStore()` for sprint lifecycle and sprint ticket assignment.
-- `useAIActivityStore()` for long-running AI job state and persisted AI workspace history.
-- `useProjectsStore()` for registered project metadata.
-
-## AI Integration
-
-Codex calls go through `useCodexShell.ts`, which wraps Tauri shell `Command.create()`.
-
-Important constraints:
-
-- Read-only analysis should pass `sandbox: 'read-only'`.
-- Sprint handover work may pass `sandbox: 'workspace-write'`.
-- Codex output should be structured JSON when the app needs to parse it.
-- Do not ask Codex to reveal private chain-of-thought. Ask for observable activity, rationale summaries, files reviewed, files changed, checks run, and final reports.
-
-The AI Workspace displays ticket steps, observable activity, code references, suggestions, and final reports. Suggestions can be sent to backlog or the current sprint.
+Streaming (Claude only) uses `runClaude({ onLine, onClose, onError })`. The `SecurityAITool` type and `AcademyAIModel` type in their respective files define valid values: `'claude' | 'codex' | 'openrouter' | 'ollama'`.
 
 ## Security Notes
 
-- Tauri shell access is intentionally allowlisted. Add new commands only when necessary, with narrow args validators.
-- Tauri CSP lives in `apps/desktop/tauri/tauri.conf.json`.
-- The Settings Contact form can submit GitHub Issues using a locally stored fine-grained token. Tokens in a desktop client are convenience secrets and can be extracted by a determined local user, so never bake broad or production secrets into source.
-- Avoid broad filesystem or shell permissions unless the feature absolutely requires them.
+- Shell access is allowlisted in `capabilities/default.json` — add entries narrowly and with argument validators
+- Never embed broad API tokens in source; the GitHub token from Device Flow is a user convenience credential
+- Read-only AI scans: always pass `sandbox: 'read-only'` to Codex
+- Never mention Tauri, WebView, Rust, or the underlying framework in user-visible text
 
 ## Coding Guidelines
 
-- Follow existing Vue/Nuxt composition style and Pinia store patterns.
-- Use lucide icons for UI controls when possible.
-- Keep UI compact and work-focused; this app is an operational desktop tool, not a marketing page.
-- Add history events when user-visible project state changes.
-- Prefer existing components such as `GlassButton`, `GlassInput`, `GlassModal`, `GlassCheckbox`, and project-specific stores.
-- Do not hand-edit generated output in `dist`, `.output`, `.nuxt`, `target`, or `apps/api/dist`.
-- Do not revert unrelated user changes in the worktree.
+- Composition API only (`<script setup lang="ts">`) — no Options API
+- Use existing shared components: `GlassButton`, `GlassInput`, `GlassModal`, `GlassCheckbox`, `GlassTextarea`
+- CSS variables for theming: `var(--bg-surface)`, `var(--bg-card)`, `var(--text)`, `var(--text-muted)`, `var(--text-faint)`, `var(--border)`
+- Never hard-edit `dist/`, `.nuxt/`, `.output/`, `target/` — generated artifacts
+- No comments explaining what code does; only add when WHY is non-obvious
+- Do not add features beyond the task scope; no premature abstractions
 
 ## Documentation
 
-Keep `README.md` aligned with current app behavior. For project-level docs generated by Vindicta, preserve the distinction between app repository docs and per-project generated README/CHANGELOG content.
+Keep `AGENT.md` and `CLAUDE.md` aligned with current architecture. The `DESIGN.md` describes visual/UX conventions. Per-project docs generated by Vindicta (README, CHANGELOG) are separate from repository docs.

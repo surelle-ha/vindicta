@@ -1,13 +1,14 @@
 <script setup lang="ts">
-import { AlertTriangle, Clock3, FileText, KeyRound, PackageSearch, PanelBottomOpen, Radar, Settings, ShieldCheck } from 'lucide-vue-next'
+import { AlertTriangle, Clock3, FileText, Github, KeyRound, PackageSearch, PanelBottomOpen, Radar, Settings, ShieldCheck } from 'lucide-vue-next'
 import type { Component } from 'vue'
 
-type SecurityWorkspaceTab = 'overview' | 'scanner' | 'findings' | 'dependencies' | 'secrets' | 'reports' | 'history' | 'settings'
+type SecurityWorkspaceTab = 'overview' | 'scanner' | 'findings' | 'dependencies' | 'secrets' | 'reports' | 'history' | 'settings' | 'github_issues'
 
 const route = useRoute()
 const router = useRouter()
 const projectsStore = useProjectsStore()
 const aiActivity = useAIActivityStore()
+const auth = useAuthStore()
 
 const activeTab = ref<SecurityWorkspaceTab>('overview')
 const headerCollapsed = ref(false)
@@ -15,7 +16,7 @@ const showPentestModal = ref(false)
 const projectId = computed(() => route.params.id as string)
 const project = computed(() => projectsStore.projects.find((p) => p.id === projectId.value))
 
-const tabs: { id: SecurityWorkspaceTab; label: string; icon: Component }[] = [
+const staticTabs: { id: SecurityWorkspaceTab; label: string; icon: Component }[] = [
   { id: 'overview', label: 'Overview', icon: ShieldCheck },
   { id: 'scanner', label: 'Scanner', icon: Radar },
   { id: 'findings', label: 'Findings', icon: AlertTriangle },
@@ -25,6 +26,14 @@ const tabs: { id: SecurityWorkspaceTab; label: string; icon: Component }[] = [
   { id: 'history', label: 'History', icon: Clock3 },
   { id: 'settings', label: 'Settings', icon: Settings },
 ]
+
+const tabs = computed(() => {
+  const all = [...staticTabs]
+  if (auth.isGitHubConnected) {
+    all.push({ id: 'github_issues', label: 'Issues', icon: Github })
+  }
+  return all
+})
 
 onMounted(async () => {
   await aiActivity.load()
@@ -41,7 +50,8 @@ onMounted(async () => {
 })
 
 function isSecurityTab(value: unknown): value is SecurityWorkspaceTab {
-  return tabs.some(tab => tab.id === value)
+  const allIds: SecurityWorkspaceTab[] = ['overview', 'scanner', 'findings', 'dependencies', 'secrets', 'reports', 'history', 'settings', 'github_issues']
+  return allIds.includes(value as SecurityWorkspaceTab)
 }
 
 function changeTab(tab: SecurityWorkspaceTab) {

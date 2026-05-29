@@ -1,8 +1,9 @@
 import { defineStore } from 'pinia'
 import { INTRO_LESSON_IDS, MAIN_LESSON_COUNT } from '~/data/curriculum'
+import type { CustomLesson } from '~/data/curriculum'
 
 export type AcademyMode = 'manual' | 'ai-assisted' | null
-export type AcademyAIModel = 'claude' | 'codex' | 'openrouter' | 'ollama' | null
+export type AcademyAIModel = 'claude' | 'codex' | 'openrouter' | 'ollama' | 'core' | null
 
 export interface AcademyChatMessage {
   id: number
@@ -47,8 +48,6 @@ async function getAcademyStore() {
   return Store.load(STORE_FILE)
 }
 
-export const TOTAL_LESSONS = MAIN_LESSON_COUNT
-
 export const useAcademyStore = defineStore('academy', () => {
   const mode = ref<AcademyMode>(null)
   const aiModel = ref<AcademyAIModel>(null)
@@ -59,18 +58,23 @@ export const useAcademyStore = defineStore('academy', () => {
   const lastVisitedModuleId = ref<string | null>(null)
   const lastVisitedLessonId = ref<string | null>(null)
   const setupComplete = ref(false)
+  const customLessons = ref<CustomLesson[]>([])
+  const customTotalLessons = ref(0)
   const _loaded = ref(false)
 
   // Only count main-course lessons (week > 0) toward progress.
   // Intro lessons (intro-1..intro-4) are orientation modules that don't affect the progress bar.
   const _introIds = new Set(INTRO_LESSON_IDS)
+  // Falls back to MAIN_LESSON_COUNT when no .va lessons have been loaded yet,
+  // so progress stays meaningful before the first course-bin load.
+  const totalLessons = computed(() => customTotalLessons.value > 0 ? customTotalLessons.value : MAIN_LESSON_COUNT)
   const completedCount = computed(
     () => Object.entries(completedLessons.value)
       .filter(([id, l]) => !_introIds.has(id) && l.completedAt !== null)
       .length,
   )
-  const allCompleted = computed(() => completedCount.value >= TOTAL_LESSONS)
-  const progressPercent = computed(() => Math.round((completedCount.value / TOTAL_LESSONS) * 100))
+  const allCompleted = computed(() => completedCount.value >= totalLessons.value)
+  const progressPercent = computed(() => Math.round((completedCount.value / totalLessons.value) * 100))
 
   function isCompleted(lessonId: string) {
     return !!completedLessons.value[lessonId]?.completedAt
@@ -217,10 +221,18 @@ export const useAcademyStore = defineStore('academy', () => {
     const mainCompleted = Object.entries(nextProgress)
       .filter(([id, progress]) => !_introIds.has(id) && progress.completedAt !== null)
       .length
-    if (mainCompleted >= TOTAL_LESSONS && !certificateIssuedAt.value) {
+    if (mainCompleted >= totalLessons.value && !certificateIssuedAt.value) {
       certificateIssuedAt.value = new Date().toISOString()
     }
     await _save()
+  }
+
+  function setCustomLessons(lessons: CustomLesson[]) {
+    customLessons.value = lessons
+  }
+
+  function setCustomTotalLessons(n: number) {
+    customTotalLessons.value = n
   }
 
   async function setLastVisited(moduleId: string, lessonId: string) {
@@ -256,5 +268,9 @@ export const useAcademyStore = defineStore('academy', () => {
     getChatSession,
     setChatSession,
     clearChatSession,
+    customLessons,
+    setCustomLessons,
+    totalLessons,
+    setCustomTotalLessons,
   }
 })

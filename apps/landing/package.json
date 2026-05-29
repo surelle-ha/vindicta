@@ -16,7 +16,9 @@
     "vue": "latest"
   },
   "dependencies": {
+    "@neondatabase/serverless": "^0.10.4",
     "lucide-vue-next": "latest",
-    "ogl": "^1.0.11"
+    "ogl": "^1.0.11",
+    "resend": "^4.5.1"
   }
 }

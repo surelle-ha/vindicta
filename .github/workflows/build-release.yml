@@ -1,0 +1,104 @@
+name: Build — Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/tauri -> target
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Nuxt (static)
+        working-directory: apps/desktop
+        run: pnpm generate
+
+      - name: Write Tauri .env
+        run: |
+          echo "GITHUB_CLIENT_ID=${{ secrets.GH_CLIENT_ID }}" > apps/desktop/tauri/.env
+
+      - name: Build Tauri (release)
+        working-directory: apps/desktop
+        run: pnpm tauri:build
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            apps/desktop/tauri/target/release/bundle/nsis/*.exe
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload to Cloudflare R2 and publish update manifest
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          R2_ENDPOINT: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          R2_BUCKET: ${{ secrets.R2_BUCKET_NAME }}
+          R2_PUBLIC_URL: ${{ secrets.R2_PUBLIC_URL }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          $installer = Get-ChildItem "apps/desktop/tauri/target/release/bundle/nsis/*.exe" | Select-Object -First 1
+          $sigFile = "$($installer.FullName).sig"
+          $sig = (Get-Content $sigFile -Raw).Trim()
+          $version = $env:TAG.TrimStart('v')
+          $installerUrl = "$env:R2_PUBLIC_URL/releases/$env:TAG/$($installer.Name)"
+
+          # Upload versioned installer
+          aws s3 cp $installer.FullName "s3://$env:R2_BUCKET/releases/$env:TAG/$($installer.Name)" `
+            --endpoint-url $env:R2_ENDPOINT
+
+          # Upload as latest so the landing page download button has a stable URL
+          aws s3 cp $installer.FullName "s3://$env:R2_BUCKET/releases/latest/vindicta-setup.exe" `
+            --endpoint-url $env:R2_ENDPOINT
+
+          # Generate and upload update manifest consumed by tauri-plugin-updater
+          $manifest = [ordered]@{
+            version  = $version
+            notes    = "See https://github.com/${{ github.repository }}/releases/tag/$env:TAG for the full changelog."
+            pub_date = (Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ")
+            platforms = [ordered]@{
+              "windows-x86_64" = [ordered]@{
+                url       = $installerUrl
+                signature = $sig
+              }
+            }
+          } | ConvertTo-Json -Depth 5
+          $manifest | Out-File -FilePath update.json -Encoding utf8NoBOM
+          aws s3 cp update.json "s3://$env:R2_BUCKET/releases/latest/update.json" `
+            --endpoint-url $env:R2_ENDPOINT `
+            --content-type "application/json"

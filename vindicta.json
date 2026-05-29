@@ -18,7 +18,7 @@
     "id": "knrkzqbZqNkj47vVujVpG",
     "ticketCounter": 0,
     "createdAt": "2026-05-27T03:35:00.128Z",
-    "updatedAt": "2026-05-28T07:23:21.296Z",
+    "updatedAt": "2026-05-28T17:05:37.131Z",
     "pentestEnabled": true,
     "pentestPromptDismissed": true,
     "pentestTargetUrl": "https://vindicta.surelle.xyz",
@@ -95,11 +95,11 @@
   "tickets": [],
   "sprints": [],
   "security": {
-    "findingCounter": 133,
+    "findingCounter": 136,
     "findings": [
       {
-        "id": "OvosgoFO4PsigevylTb_o",
-        "number": 133,
+        "id": "jVxEia6fFIy7TPPdkPFFm",
+        "number": 136,
         "title": "Floating dependency versions detected",
         "severity": "low",
         "status": "open",
@@ -109,8 +109,8 @@
         "detail": "One or more dependencies use latest or wildcard versions, increasing supply-chain drift risk.",
         "evidence": "@pinia/nuxt@latest in D:\\Workspace\\vindicta\\apps\\desktop\\package.json\n@vueuse/core@latest in D:\\Workspace\\vindicta\\apps\\desktop\\package.json\n@vueuse/nuxt@latest in D:\\Workspace\\vindicta\\apps\\desktop\\package.json\nlucide-vue-next@latest in D:\\Workspace\\vindicta\\apps\\desktop\\package.json\nlucide-vue-next@latest in D:\\Workspace\\vindicta\\apps\\landing\\package.json\nnanoid@latest in D:\\Workspace\\vindicta\\apps\\desktop\\package.json\npinia@latest in D:\\Workspace\\vindicta\\apps\\desktop\\package.json\ntailwindcss@latest in D:\\Workspace\\vindicta\\apps\\desktop\\package.json\ntailwindcss@latest in D:\\Workspace\\vindicta\\apps\\landing\\package.json\ntypescript@latest in D:\\Workspace\\vindicta\\apps\\desktop\\package.json\ntypescript@latest in D:\\Workspace\\vindicta\\apps\\landing\\package.json\nvue@latest in D:\\Workspace\\vindicta\\apps\\desktop\\package.json\nvue@latest in D:\\Workspace\\vindicta\\apps\\landing\\package.json\nvue-router@latest in D:\\Workspace\\vindicta\\apps\\desktop\\package.json",
         "recommendation": "Pin package ranges intentionally and rely on reviewed dependency update workflows.",
-        "createdAt": "2026-05-28T06:12:31.829Z",
-        "updatedAt": "2026-05-28T06:12:31.829Z",
+        "createdAt": "2026-05-28T17:04:25.510Z",
+        "updatedAt": "2026-05-28T17:04:25.510Z",
         "resolvedAt": null,
         "scanId": null
       },
@@ -315,6 +315,17 @@
     }
   },
   "history": [
+    {
+      "id": "bezRPzqu75L9LeIc6J3En",
+      "at": "2026-05-28T17:03:30.027Z",
+      "action": "security:scan_completed",
+      "actor": "Codex",
+      "payload": {
+        "name": "Security scan - 5/29/2026, 1:03:29 AM",
+        "findings": 3,
+        "parseWarning": null
+      }
+    },
     {
       "id": "Gb_WcgjoHosHE_IlgVySc",
       "at": "2026-05-27T14:27:51.942Z",

@@ -11,12 +11,13 @@
 import { runClaude } from '~/composables/useClaudeShell'
 import { runCodexExec } from '~/composables/useCodexShell'
 import { runOpenRouterChat } from '~/composables/useOpenRouterAI'
+import { runOllamaChat } from '~/composables/useOllamaAI'
 import { useKokoro } from '~/composables/useKokoro'
 import type { Lesson } from '~/data/curriculum'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-export type TTSScriptModel = 'claude' | 'codex' | 'openrouter'
+export type TTSScriptModel = 'claude' | 'codex' | 'openrouter' | 'ollama' | 'core'
 
 interface TTSPrefs {
   enabled: boolean
@@ -236,11 +237,20 @@ async function generateScriptViaOpenRouter(prompt: string): Promise<string> {
 }
 
 async function generateScript(lesson: Lesson, model: TTSScriptModel): Promise<string> {
+  const app = useAppStore()
   const prompt = buildNarrationPrompt(lesson.title, lesson.content)
   switch (model) {
     case 'claude':      return generateScriptViaClaude(prompt)
     case 'codex':       return generateScriptViaCodex(prompt)
     case 'openrouter':  return generateScriptViaOpenRouter(prompt)
+    case 'ollama':
+      return runOllamaChat({
+        url: app.ollama.url,
+        model: app.ollama.model,
+        messages: [{ role: 'user', content: prompt }],
+      })
+    case 'core':
+      throw new Error('Core AI is not yet available.')
     default:            throw new Error(`Unknown script model: ${model as string}`)
   }
 }

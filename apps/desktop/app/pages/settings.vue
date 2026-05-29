@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Sun, Moon, Database, ChevronDown, ChevronUp, Stethoscope, CheckCircle2, AlertTriangle, XCircle, Wrench, Loader2, Terminal, Download, Github, Heart, Eye, Plug, Zap, Rss, Plus, Trash2 } from 'lucide-vue-next'
+import { Sun, Moon, Database, ChevronDown, ChevronUp, FolderOpen, Stethoscope, CheckCircle2, AlertTriangle, XCircle, Wrench, Loader2, Terminal, Download, Github, Heart, Eye, Plug, Zap, Rss, Plus, Trash2 } from 'lucide-vue-next'
 
 const app = useAppStore()
 const user = useUserStore()
@@ -296,6 +296,17 @@ async function checkForUpdates() {
 async function openLatestRelease() {
   const { open } = await import('@tauri-apps/plugin-shell')
   await open(latestRelease.value?.htmlUrl || 'https://github.com/surelle-ha/vindicta/releases')
+}
+
+async function openDataFolder() {
+  try {
+    const { open } = await import('@tauri-apps/plugin-shell')
+    const { appLocalDataDir } = await import('@tauri-apps/api/path')
+    const dir = await appLocalDataDir()
+    await open(dir)
+  } catch {
+    // browser dev mode — no-op
+  }
 }
 
 // Vigilante
@@ -1144,6 +1155,14 @@ onMounted(() => {
     <div v-show="activeSettingsTab === 'data'" class="space-y-3">
       <h3 class="text-[10px] font-semibold text-[var(--text-faint)] uppercase tracking-[0.12em]">Advanced</h3>
       <div class="p-4 rounded-xl bg-[var(--bg-card)] border border-[var(--border)] space-y-3">
+        <button
+          class="flex items-center gap-2 text-xs text-[var(--text-muted)] hover:text-[var(--text)] transition-colors"
+          @click="openDataFolder"
+        >
+          <FolderOpen class="size-3.5" />
+          Open data folder in explorer
+        </button>
+        <div class="h-px bg-[var(--border)]" />
         <button
           class="flex items-center gap-2 text-xs text-[var(--text-muted)] hover:text-[var(--text)] transition-colors"
           @click="showRawData = !showRawData"

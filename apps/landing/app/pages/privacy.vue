@@ -70,10 +70,10 @@ const lastUpdated = 'May 28, 2026'
             <p>Vindicta makes a small number of outbound network requests, none of which involve your personal data:</p>
             <ul>
               <li>
-                <strong>GitHub Releases API</strong> — the landing page (<code>vindicta.surelle.xyz</code>) fetches the latest release tag from <code>api.github.com/repos/surelle-ha/vindicta/releases/latest</code> to display the current version and download link. No identifying information is sent.
+                <strong>Beta sign-up</strong> — when you register for the open beta, we collect your name and email address to send you a download link. This data is stored in our database and is not shared with third parties or used for marketing.
               </li>
               <li>
-                <strong>AI provider calls (Academy / Scan)</strong> — if you configure an AI model (Claude, Codex, or OpenRouter) for scanning or the Academy Professor, the app invokes those CLIs or APIs directly from your machine using credentials you supply. Vindicta does not proxy, store, or log those requests. The AI provider's own privacy policy applies to any data you send.
+                <strong>AI provider calls (Academy / Scan)</strong> — if you configure an AI model (Claude, OpenRouter, or Ollama) for scanning or the Academy Professor, the app invokes those CLIs or APIs directly from your machine using credentials you supply. Vindicta does not proxy, store, or log those requests. The AI provider's own privacy policy applies to any data you send.
               </li>
             </ul>
           </section>
@@ -90,23 +90,23 @@ const lastUpdated = 'May 28, 2026'
           </section>
 
           <section>
-            <h2>6. Open Source</h2>
+            <h2>6. Data Retention</h2>
             <p>
-              Vindicta is open source software. You can audit exactly what the application does, including all network calls and local file access, by reading the source code on
-              <a href="https://github.com/surelle-ha/vindicta" target="_blank" rel="noopener">GitHub</a>.
+              Beta sign-up information (name and email) is retained for the duration of the beta programme. You may request deletion at any time by emailing
+              <a href="mailto:privacy@vindicta.surelle.xyz">privacy@vindicta.surelle.xyz</a>.
             </p>
           </section>
 
           <section>
             <h2>7. Changes to This Policy</h2>
-            <p>If we ever change this policy in a material way, we will update the date at the top of this page and note the change in the GitHub repository. Because we collect no data, any future changes are likely to remain minimal.</p>
+            <p>If we ever change this policy in a material way, we will update the date at the top of this page. Because we collect minimal data, any future changes are likely to remain minimal.</p>
           </section>
 
           <section>
             <h2>8. Contact</h2>
             <p>
-              Questions about this policy? Open an issue on
-              <a href="https://github.com/surelle-ha/vindicta/issues" target="_blank" rel="noopener">GitHub</a>.
+              Questions about this policy? Email us at
+              <a href="mailto:privacy@vindicta.surelle.xyz">privacy@vindicta.surelle.xyz</a>.
             </p>
           </section>
 

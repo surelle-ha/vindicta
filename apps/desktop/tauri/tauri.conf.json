@@ -38,9 +38,15 @@
       "icons/128x128@2x.png",
       "icons/icon.png",
       "icons/icon.ico"
-    ]
+    ],
+    "resources": ["course-bin/*.va"]
   },
   "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDQwMEVCNzYwN0FDNDNGODgKUldTSVA4UjZZTGNPUUxQZTE5MUdiVUV2bTZUK0pIOHZUYWkrOTVIMTFEZmlIWE9UaStRTGY2WnoK",
+      "endpoints": ["https://REPLACE_WITH_R2_DOMAIN/releases/latest/update.json"],
+      "dialog": true
+    },
     "shell": {
       "open": true
     }

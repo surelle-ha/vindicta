@@ -17,19 +17,11 @@ defineProps<{
       </div>
 
       <div class="flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
-        <NuxtLink to="/download" class="transition-colors hover:text-white/60">Download</NuxtLink>
+        <NuxtLink to="/beta" class="transition-colors hover:text-white/60">Open Beta</NuxtLink>
         <NuxtLink to="/docs" class="transition-colors hover:text-white/60">Docs</NuxtLink>
         <NuxtLink to="/support" class="transition-colors hover:text-white/60">Support</NuxtLink>
         <NuxtLink to="/privacy" class="transition-colors hover:text-white/60">Privacy</NuxtLink>
         <NuxtLink to="/terms" class="transition-colors hover:text-white/60">Terms</NuxtLink>
-        <a
-          href="https://github.com/surelle-ha/vindicta"
-          target="_blank"
-          rel="noopener"
-          class="transition-colors hover:text-white/60"
-        >
-          GitHub
-        </a>
       </div>
     </div>
   </footer>

@@ -78,7 +78,7 @@ function buildDocumentXml(report: VindictaSecurityDocxReport) {
     stat('Low findings', severityCount(report.findings, 'low')),
     para('Methodology', 'Heading1'),
     bullet('Codex reviewed the selected project in read-only mode.'),
-    bullet('The review focused on OWASP-style risks, abusable functions, configuration, Tauri permissions, API boundaries, and frontend trust boundaries.'),
+    bullet('The review focused on OWASP-style risks, abusable functions, configuration, desktop app permissions, API boundaries, and frontend trust boundaries.'),
     bullet('Generated findings should be validated by an engineer before remediation is considered complete.'),
     para('Findings', 'Heading1'),
     ...(report.findings.length

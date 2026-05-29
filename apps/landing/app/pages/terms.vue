@@ -34,7 +34,7 @@ const lastUpdated = 'May 28, 2026'
             <div>
               <p class="text-[14px] font-bold text-white mb-1">The short version</p>
               <p class="text-[13px] leading-relaxed text-white/55">
-                Vindicta is free, open-source software released under the MIT License. Use it responsibly — only on systems you own or have explicit written permission to test. We provide no warranty.
+                Vindicta is free proprietary software. Use it responsibly — only on systems you own or have explicit written permission to test. We provide no warranty.
               </p>
             </div>
           </div>
@@ -53,11 +53,10 @@ const lastUpdated = 'May 28, 2026'
           <section>
             <h2>2. License</h2>
             <p>
-              Vindicta is released under the <strong>MIT License</strong>. You are free to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, subject to the conditions in the LICENSE file included with the source code.
+              Vindicta is proprietary software. You are granted a personal, non-transferable licence to install and use the Software on devices you own, solely for your own security research and learning purposes.
             </p>
             <p>
-              The full license text is available at
-              <a href="https://github.com/surelle-ha/vindicta/blob/main/LICENSE" target="_blank" rel="noopener">github.com/surelle-ha/vindicta</a>.
+              You may not redistribute, resell, sublicense, or create derivative works of the Software without prior written consent from Surelle-ha.
             </p>
           </section>
 
@@ -88,7 +87,7 @@ const lastUpdated = 'May 28, 2026'
           <section>
             <h2>5. AI Features</h2>
             <p>
-              Vindicta integrates with third-party AI providers (Anthropic Claude, OpenAI Codex, OpenRouter) for security scanning and the Academy professor. When you use these features, your data is sent to the respective provider's API under their own terms of service and privacy policy. Vindicta does not control, store, or review that data.
+              Vindicta integrates with third-party AI providers (Anthropic Claude, OpenRouter, Ollama) for security scanning and the Academy professor. When you use these features, your data is sent to the respective provider's API under their own terms of service and privacy policy. Vindicta does not control, store, or review that data.
             </p>
             <p>You are responsible for complying with your AI provider's acceptable use policies.</p>
           </section>
@@ -120,8 +119,8 @@ const lastUpdated = 'May 28, 2026'
           <section>
             <h2>9. Contact</h2>
             <p>
-              For questions or concerns about these terms, open an issue on
-              <a href="https://github.com/surelle-ha/vindicta/issues" target="_blank" rel="noopener">GitHub</a>.
+              For questions or concerns about these terms, email us at
+              <a href="mailto:legal@vindicta.surelle.xyz">legal@vindicta.surelle.xyz</a>.
             </p>
           </section>
 

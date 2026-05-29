@@ -7,6 +7,7 @@ import {
   Clock3,
   FileText,
   Files,
+  Github,
   GraduationCap,
   House,
   KeyRound,
@@ -26,6 +27,7 @@ const route = useRoute()
 const router = useRouter()
 const projects = useProjectsStore()
 const app = useAppStore()
+const auth = useAuthStore()
 const collapsed = useState('sidebar-collapsed', () => false)
 const workspaceExpanded = useState('sidebar-workspace-expanded', () => true)
 const pentestExpanded = useState('sidebar-pentest-expanded', () => true)
@@ -39,16 +41,22 @@ const navItems = [
 
 // Workspace sub-tabs matching the SecurityWorkspace tabs
 // `link` = navigate to absolute path; null = navigate via ?tab= query param
-const workspaceTabs = [
-  { id: 'overview',      label: 'Overview',      icon: ShieldCheck,   link: null as string | null },
-  { id: 'scanner',       label: 'Scanner',       icon: Radar,          link: null as string | null },
-  { id: 'findings',      label: 'Findings',      icon: AlertTriangle,  link: null as string | null },
-  { id: 'dependencies',  label: 'Dependencies',  icon: PackageSearch,  link: null as string | null },
-  { id: 'secrets',       label: 'Secrets',       icon: KeyRound,       link: null as string | null },
-  { id: 'reports',       label: 'Reports',       icon: FileText,       link: null as string | null },
-  { id: 'history',       label: 'History',       icon: Clock3,         link: null as string | null },
-  { id: 'settings',      label: 'Settings',      icon: Settings,       link: null as string | null },
-]
+const workspaceTabs = computed(() => {
+  const tabs = [
+    { id: 'overview',       label: 'Overview',      icon: ShieldCheck,   link: null as string | null },
+    { id: 'scanner',        label: 'Scanner',       icon: Radar,          link: null as string | null },
+    { id: 'findings',       label: 'Findings',      icon: AlertTriangle,  link: null as string | null },
+    { id: 'dependencies',   label: 'Dependencies',  icon: PackageSearch,  link: null as string | null },
+    { id: 'secrets',        label: 'Secrets',       icon: KeyRound,       link: null as string | null },
+    { id: 'reports',        label: 'Reports',       icon: FileText,       link: null as string | null },
+    { id: 'history',        label: 'History',       icon: Clock3,         link: null as string | null },
+    { id: 'settings',       label: 'Settings',      icon: Settings,       link: null as string | null },
+  ]
+  if (auth.isGitHubConnected) {
+    tabs.push({ id: 'github_issues', label: 'Issues', icon: Github, link: null })
+  }
+  return tabs
+})
 
 const activeProject = computed(() => projects.activeProject)
 const isOnWorkspace = computed(() => activeProject.value && route.path.startsWith(`/projects/${activeProject.value.id}`))

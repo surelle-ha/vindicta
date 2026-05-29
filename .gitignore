@@ -4,6 +4,7 @@ node_modules/
 # Nuxt build
 .nuxt/
 .output/
+apps/desktop/dist/
 
 # Tauri
 src-tauri/target/

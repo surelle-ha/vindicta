@@ -5,21 +5,6 @@ useLandingSeo({
   path: '/',
 })
 
-// ── GitHub release ─────────────────────────────────────────────────────────────
-const downloadUrl = ref('https://github.com/surelle-ha/vindicta/releases/latest')
-const releaseTag  = ref<string | null>(null)
-
-onMounted(async () => {
-  try {
-    const res  = await fetch('https://api.github.com/repos/surelle-ha/vindicta/releases/latest')
-    const data = await res.json()
-    releaseTag.value = data.tag_name ?? null
-    const exe = (data.assets as Array<{ name: string; browser_download_url: string }> | undefined)
-      ?.find(a => /x64-setup\.exe$/i.test(a.name) || /\.exe$/i.test(a.name))
-    if (exe) downloadUrl.value = exe.browser_download_url
-  } catch { /* fallback stays */ }
-})
-
 // ── Scroll-reveal ─────────────────────────────────────────────────────────────
 const revealed = ref<Set<string>>(new Set())
 
@@ -275,32 +260,19 @@ const badgeClass: Record<string, string> = {
           class="animate-fade-up mt-10 flex flex-col sm:flex-row items-center gap-4"
           style="animation-delay:0.55s"
         >
-          <a
-            id="download"
-            :href="downloadUrl"
-            target="_blank" rel="noopener"
+          <NuxtLink
+            to="/beta"
             class="group flex items-center gap-2.5 rounded-2xl bg-accent px-8 py-3.5 text-[14px] font-bold text-white shadow-lg transition-all hover:bg-accent/90 hover:scale-[1.03] hover:shadow-accent/40 hover:shadow-2xl active:scale-[0.98]"
           >
-            <svg class="h-4 w-4 transition-transform group-hover:translate-y-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
             </svg>
-            Download for Windows<span v-if="releaseTag" class="ml-1 opacity-60 font-normal text-[12px]">{{ releaseTag }}</span>
-          </a>
-          <a
-            href="https://github.com/surelle-ha/vindicta"
-            target="_blank" rel="noopener"
-            class="flex items-center gap-2 rounded-2xl border border-white/15 px-8 py-3.5 text-[14px] font-medium text-white/60 transition-all hover:border-white/30 hover:text-white hover:bg-white/5"
-          >
-            <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
-            </svg>
-            View on GitHub
-          </a>
+            Join the Open Beta
+          </NuxtLink>
         </div>
 
         <p class="animate-fade-up mt-5 text-[11px] text-white/25" style="animation-delay:0.65s">
-          Windows 10/11 · Free · No account required ·
-          <a href="https://github.com/surelle-ha/vindicta" target="_blank" rel="noopener" class="underline underline-offset-2 hover:text-white/50 transition-colors">build from source</a>
+          Free · No account required · No telemetry
         </p>
       </div>
 
@@ -317,6 +289,9 @@ const badgeClass: Record<string, string> = {
       <div class="marquee-track flex gap-12 text-[11px] font-semibold uppercase tracking-widest text-white/25">
         <template v-for="_ in 4" :key="_">
           <span>AI Security Scanning</span><span class="text-accent/40">·</span>
+          <span>Claude</span><span class="text-accent/40">·</span>
+          <span>OpenRouter</span><span class="text-accent/40">·</span>
+          <span>Ollama</span><span class="text-accent/40">·</span>
           <span>Findings Tracker</span><span class="text-accent/40">·</span>
           <span>Dependency Inventory</span><span class="text-accent/40">·</span>
           <span>Secret Detection</span><span class="text-accent/40">·</span>
@@ -368,6 +343,53 @@ const badgeClass: Record<string, string> = {
 
           <!-- Accent line on hover -->
           <div class="absolute bottom-0 left-6 right-6 h-px bg-gradient-to-r from-transparent via-accent/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+        </div>
+      </div>
+    </section>
+
+    <!-- ── AI Providers ────────────────────────────────────────────────────── -->
+    <section class="px-6 py-20 border-t border-white/5">
+      <div class="max-w-5xl mx-auto">
+        <div
+          data-reveal="providers-header"
+          :class="['transition-all duration-700 text-center mb-10', isRevealed('providers-header') ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6']"
+        >
+          <p class="text-[11px] font-semibold uppercase tracking-[0.3em] text-accent/70 mb-3">Bring your own model</p>
+          <h2 class="text-[32px] font-display font-black uppercase leading-tight">Works with the AI you already use</h2>
+          <p class="mt-3 text-[13px] text-white/40 max-w-lg mx-auto">Choose any supported provider — scans run through whichever model you configure in settings.</p>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <div
+            v-for="(provider, i) in [
+              { name: 'Claude',      sub: 'Anthropic',   badge: 'Live',       badgeCls: 'bg-ok/15 text-ok',          icon: 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z', glow: 'rgba(139,92,246,0.12)', border: 'rgba(139,92,246,0.20)' },
+              { name: 'OpenRouter',  sub: 'Multi-model',  badge: 'Live',       badgeCls: 'bg-ok/15 text-ok',          icon: 'M8.288 15.038a5.25 5.25 0 017.424 0M5.106 11.856c3.807-3.808 9.98-3.808 13.788 0M1.924 8.674c5.565-5.565 14.587-5.565 20.152 0M12.53 18.22l-.53.53-.53-.53a.75.75 0 011.06 0z', glow: 'rgba(14,165,233,0.10)', border: 'rgba(14,165,233,0.20)' },
+              { name: 'Ollama',      sub: 'Local / Offline', badge: 'Live',   badgeCls: 'bg-ok/15 text-ok',          icon: 'M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H3.75A2.25 2.25 0 011.5 15V5.25m19.5 0A2.25 2.25 0 0018.75 3H5.25A2.25 2.25 0 003 5.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 7.409a2.25 2.25 0 01-1.07-1.916V5.25', glow: 'rgba(249,115,22,0.10)', border: 'rgba(249,115,22,0.20)' },
+              { name: 'Core AI',     sub: 'Vindicta',     badge: 'Soon',       badgeCls: 'bg-white/8 text-white/40',  icon: 'M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z', glow: 'rgba(139,92,246,0.07)', border: 'rgba(139,92,246,0.12)' },
+            ]"
+            :key="provider.name"
+            :data-reveal="`provider-${i}`"
+            :class="['transition-all duration-700', isRevealed(`provider-${i}`) ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8']"
+            :style="{ transitionDelay: `${i * 80}ms`, borderColor: provider.border, background: 'rgba(30,31,34,0.6)' }"
+            class="relative rounded-2xl border p-5 flex flex-col gap-3 overflow-hidden hover:-translate-y-0.5 transition-transform duration-200"
+          >
+            <div
+              class="absolute -top-8 -right-8 h-28 w-28 rounded-full blur-3xl pointer-events-none opacity-70"
+              :style="{ backgroundColor: provider.glow }"
+            />
+            <div class="relative z-10 flex items-start justify-between">
+              <div class="flex h-9 w-9 items-center justify-center rounded-xl bg-white/[0.05] border border-white/8">
+                <svg class="h-4 w-4 text-white/50" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+                  <path stroke-linecap="round" stroke-linejoin="round" :d="provider.icon" />
+                </svg>
+              </div>
+              <span class="text-[9px] font-bold uppercase tracking-wider rounded-full px-2 py-0.5" :class="provider.badgeCls">{{ provider.badge }}</span>
+            </div>
+            <div class="relative z-10">
+              <p class="text-[13px] font-semibold text-white">{{ provider.name }}</p>
+              <p class="text-[11px] text-white/35 mt-0.5">{{ provider.sub }}</p>
+            </div>
+          </div>
         </div>
       </div>
     </section>
@@ -627,31 +649,20 @@ const badgeClass: Record<string, string> = {
           <span class="text-white/30">Without the cloud.</span>
         </h2>
         <p class="max-w-md text-[14px] text-white/40 leading-relaxed">
-          Download Vindicta, open a project, and run your first scan — offline, no account, forever free.
+          Sign up for the open beta, open a project, and run your first scan — offline, no account, forever free.
         </p>
         <div class="flex flex-col sm:flex-row items-center gap-4">
-          <a
-            :href="downloadUrl"
-            target="_blank" rel="noopener"
+          <NuxtLink
+            to="/beta"
             class="group flex items-center gap-2.5 rounded-2xl bg-accent px-10 py-4 text-[15px] font-bold text-white shadow-lg transition-all hover:bg-accent/90 hover:scale-[1.03] hover:shadow-accent/40 hover:shadow-2xl active:scale-[0.98]"
           >
-            <svg class="h-5 w-5 transition-transform group-hover:translate-y-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
             </svg>
-            Download Vindicta<span v-if="releaseTag" class="ml-1 opacity-60 font-normal text-[13px]">{{ releaseTag }}</span>
-          </a>
-          <a
-            href="https://github.com/surelle-ha/vindicta"
-            target="_blank" rel="noopener"
-            class="flex items-center gap-2 text-[13px] text-white/40 hover:text-white transition-colors"
-          >
-            View source on GitHub →
-          </a>
+            Join the Open Beta
+          </NuxtLink>
         </div>
-        <p class="text-[11px] text-white/20">
-          Windows 10/11 · No account · No telemetry · Open source —
-          <a href="https://github.com/surelle-ha/vindicta" target="_blank" rel="noopener" class="underline underline-offset-2 hover:text-white/40 transition-colors">build from source</a>
-        </p>
+        <p class="text-[11px] text-white/20">No account · No telemetry · Windows 10/11 · Free</p>
       </div>
     </section>
   </div>

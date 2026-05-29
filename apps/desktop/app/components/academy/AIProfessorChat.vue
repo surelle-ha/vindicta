@@ -12,6 +12,7 @@ const props = defineProps<{
   lesson: Lesson
   lessonCompleted: boolean
   terminalVisible: boolean
+  extraContext?: string
 }>()
 
 const emit = defineEmits<{
@@ -44,7 +45,7 @@ const sessionStarted = ref(false)
 // Pre-fill from stored preference, default to claude
 const pendingModel = ref<AcademyAIModel>(academy.aiModel ?? 'claude')
 
-const modelOptions: { id: AcademyAIModel; label: string; sublabel: string; note?: string; color: string; bg: string; border: string; icon: any }[] = [
+const modelOptions: { id: AcademyAIModel; label: string; sublabel: string; note?: string; color: string; bg: string; border: string; icon: any; disabled?: boolean; soon?: boolean }[] = [
   {
     id: 'claude',
     label: 'Claude',
@@ -82,6 +83,17 @@ const modelOptions: { id: AcademyAIModel; label: string; sublabel: string; note?
     bg: 'bg-orange-500/10',
     border: 'border-orange-500/25',
     icon: Terminal,
+  },
+  {
+    id: 'core',
+    label: 'Core AI',
+    sublabel: 'Vindicta\'s native AI model — currently in training',
+    color: 'text-rose-300',
+    bg: 'bg-rose-500/10',
+    border: 'border-rose-500/25',
+    icon: Bot,
+    disabled: true,
+    soon: true,
   },
 ]
 
@@ -241,8 +253,9 @@ async function finalizeProfessorMessage(profMsg: ChatMessage, rawText: string) {
 function buildSystemPrompt(): string {
   const objectivesList = props.lesson.objectives.map(o => `- ${o}`).join('\n')
   const contentSummary = props.lesson.content.slice(0, 800) + (props.lesson.content.length > 800 ? '...' : '')
+  const authorContext = props.extraContext?.trim() ? `${props.extraContext.trim()}\n\n` : ''
 
-  return `You are Professor Vindicta, an expert cybersecurity instructor for a flexible, self-paced security bootcamp.
+  return `${authorContext}You are Professor Vindicta, an expert cybersecurity instructor for a flexible, self-paced security bootcamp.
 The student is currently studying "${props.lesson.title}".
 
 Lesson objectives:
@@ -593,20 +606,23 @@ watch(() => props.lesson.id, () => {
               v-for="m in modelOptions"
               :key="m.id ?? ''"
               class="flex w-full items-start gap-3 rounded-xl border p-3 text-left transition-all"
-              :class="pendingModel === m.id
-                ? [m.border, m.bg]
-                : 'border-[var(--border)] hover:border-white/10 hover:bg-white/[0.02]'"
-              @click="pendingModel = m.id"
+              :class="m.disabled
+                ? 'cursor-not-allowed border-[var(--border)] opacity-50'
+                : pendingModel === m.id
+                  ? [m.border, m.bg]
+                  : 'border-[var(--border)] hover:border-white/10 hover:bg-white/[0.02]'"
+              :disabled="m.disabled"
+              @click="!m.disabled && (pendingModel = m.id)"
             >
               <!-- Radio dot -->
               <div
                 class="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border transition-colors"
-                :class="pendingModel === m.id
+                :class="pendingModel === m.id && !m.disabled
                   ? [m.border, m.bg]
                   : 'border-[var(--border)]'"
               >
                 <div
-                  v-if="pendingModel === m.id"
+                  v-if="pendingModel === m.id && !m.disabled"
                   class="size-2 rounded-full"
                   :class="m.color.replace('text-', 'bg-')"
                 />
@@ -616,9 +632,8 @@ watch(() => props.lesson.id, () => {
                 <div class="flex items-center gap-1.5">
                   <component :is="m.icon" class="size-3.5 shrink-0" :class="m.color" />
                   <span class="text-xs font-semibold text-[var(--text)]">{{ m.label }}</span>
-                  <span v-if="m.id === 'claude'" class="rounded-full border border-violet-500/25 bg-violet-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-violet-300">
-                    Recommended
-                  </span>
+                  <span v-if="m.id === 'claude'" class="rounded-full border border-violet-500/25 bg-violet-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-violet-300">Recommended</span>
+                  <span v-if="m.soon" class="rounded-full border border-rose-500/25 bg-rose-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-rose-300">Soon</span>
                 </div>
                 <p class="mt-0.5 text-[11px] text-[var(--text-faint)]">{{ m.sublabel }}</p>
                 <p v-if="m.note" class="mt-0.5 text-[10px] text-amber-400/70 italic">{{ m.note }}</p>

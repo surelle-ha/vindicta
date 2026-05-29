@@ -28,27 +28,29 @@ import {
   Zap,
 } from 'lucide-vue-next'
 import { useAcademyStore } from '~/stores/academy'
-import { LESSONS, WEEKS, TOTAL_DAYS, getLesson, getWeekMeta } from '~/data/curriculum'
-import type { Lesson, Week } from '~/data/curriculum'
+import { LESSONS, WEEKS, TOTAL_DAYS, INTRO_LESSON_IDS, getLesson, getWeekMeta } from '~/data/curriculum'
+import type { Lesson, CustomLesson, Week } from '~/data/curriculum'
 import AIProfessorChat from '~/components/academy/AIProfessorChat.vue'
 import AcademyAudioPlayer from '~/components/academy/AcademyAudioPlayer.vue'
 import AcademyWSLTerminal from '~/components/academy/AcademyWSLTerminal.vue'
 import AcademyWhiteboard from '~/components/academy/AcademyWhiteboard.vue'
 import { useAcademyTTS } from '~/composables/useAcademyTTS'
 import type { TTSScriptModel } from '~/composables/useAcademyTTS'
+import { useAcademyStudio } from '~/composables/useAcademyStudio'
 
 const academy = useAcademyStore()
 const user = useUserStore()
 const tts      = useAcademyTTS()
+const studio   = useAcademyStudio()
 const { notify } = useNotifications()
 
 type View = 'setup' | 'course' | 'lesson' | 'certificate'
 const view = ref<View>('course')
-const currentLesson = ref<Lesson | null>(null)
+const currentLesson = ref<Lesson | CustomLesson | null>(null)
 
 // ── TTS state ──────────────────────────────────────────────────────────────
 const showTTSModal      = ref(false)
-const ttsModalLesson    = ref<Lesson | null>(null)
+const ttsModalLesson    = ref<Lesson | CustomLesson | null>(null)
 const ttsModalModel     = ref<TTSScriptModel>('claude')
 const currentAudioUrl   = ref<string | null>(null)
 const lessonActionMenuId = ref<string | null>(null)
@@ -100,19 +102,21 @@ const bulkRunning         = ref(false)
 const bulkStopRequested   = ref(false)
 const bulkIdx             = ref(0)
 const bulkCurrentLesson   = computed(() =>
-  bulkRunning.value ? (LESSONS.find(l => l.id === bulkQueue.value[bulkIdx.value]) ?? null) : null,
+  bulkRunning.value ? (allLessons.value.find(l => l.id === bulkQueue.value[bulkIdx.value]) ?? null) : null,
 )
 
 // ── TTS suggestion modal ───────────────────────────────────────────────────
 const showTTSSuggestionModal = ref(false)
 
-const ttsModelOptions: { id: TTSScriptModel; label: string; description: string }[] = [
+const ttsModelOptions: { id: TTSScriptModel; label: string; description: string; disabled?: boolean; soon?: boolean }[] = [
   { id: 'claude',      label: 'Claude',      description: 'Anthropic Claude Code CLI' },
   { id: 'codex',       label: 'Codex',       description: 'OpenAI Codex CLI' },
   { id: 'openrouter',  label: 'OpenRouter',  description: 'Configured OpenRouter model' },
+  { id: 'ollama',      label: 'Ollama',      description: 'Local Ollama server' },
+  { id: 'core',        label: 'Core AI',     description: "Vindicta's native AI model — currently in training", disabled: true, soon: true },
 ]
 
-function openCreateTTSModal(lesson: Lesson) {
+function openCreateTTSModal(lesson: Lesson | CustomLesson) {
   ttsModalLesson.value = lesson
   ttsModalModel.value = tts.scriptModel.value
   showTTSModal.value   = true
@@ -136,16 +140,19 @@ async function confirmCreateTTS() {
   }
 }
 
-async function clearLessonAudio(lesson: Lesson) {
+async function clearLessonAudio(lesson: Lesson | CustomLesson) {
   lessonActionMenuId.value = null
   await tts.clearAudio(lesson.id)
-  if (currentLesson.value?.id === lesson.id && currentAudioUrl.value) {
-    URL.revokeObjectURL(currentAudioUrl.value)
-    currentAudioUrl.value = null
+  if ('embeddedAudio' in lesson && lesson.embeddedAudio) {
+    await studio.loadEmbeddedAudio(lesson.id, lesson.embeddedAudio.data)
+  }
+  if (currentLesson.value?.id === lesson.id) {
+    if (currentAudioUrl.value) URL.revokeObjectURL(currentAudioUrl.value)
+    currentAudioUrl.value = await tts.loadAudio(lesson.id)
   }
 }
 
-function toggleLessonActions(lesson: Lesson) {
+function toggleLessonActions(lesson: Lesson | CustomLesson) {
   lessonActionMenuId.value = lessonActionMenuId.value === lesson.id ? null : lesson.id
 }
 
@@ -174,7 +181,7 @@ async function startBulkTTS() {
   for (let i = 0; i < queue.length; i++) {
     if (bulkStopRequested.value) break
     bulkIdx.value = i
-    const lesson = LESSONS.find(l => l.id === queue[i])
+    const lesson = allLessons.value.find(l => l.id === queue[i])
     if (!lesson || tts.cachedLessonIds.value.has(lesson.id)) continue
     try {
       await tts.createTTS(lesson, bulkTTSModel.value)
@@ -226,6 +233,19 @@ onMounted(async () => {
   window.addEventListener('resize', scheduleWindowMaximizeCheck)
   await refreshWindowMaximized()
 
+  // Seed course-bin from bundled resources on first launch (no-op if already seeded)
+  await studio.seedCourseBin()
+  // Load custom .va lessons from course-bin directory
+  const customLessons = await studio.loadCourseBin()
+  academy.setCustomLessons(customLessons)
+  // Count non-intro .va lessons toward the progress total so migrated built-in curriculum is tracked
+  const introIds = new Set(INTRO_LESSON_IDS)
+  const countable = customLessons.filter(l => !introIds.has(l.id))
+  if (countable.length > 0) academy.setCustomTotalLessons(countable.length)
+  for (const cl of customLessons) {
+    if (cl.embeddedAudio) await studio.loadEmbeddedAudio(cl.id, cl.embeddedAudio.data)
+  }
+
   await academy.loadFromDisk()
   setupCertificateName.value = academy.certificateName ?? ''
   if (!academy.setupComplete) {
@@ -236,9 +256,9 @@ onMounted(async () => {
   }
   else {
     view.value = 'course'
-    // Restore last visited lesson
+    // Restore last visited lesson (built-in or custom)
     if (academy.lastVisitedLessonId) {
-      const last = getLesson(academy.lastVisitedLessonId)
+      const last = allLessons.value.find(l => l.id === academy.lastVisitedLessonId) ?? null
       if (last && isLessonUnlocked(last)) currentLesson.value = last
     }
   }
@@ -295,69 +315,135 @@ async function completeSetup() {
 
 // ── Course view ────────────────────────────────────────────────────────────
 
-const weekFilter = ref<number | null>(null)
+const weekFilter    = ref<number | null>(null)
+const sectionFilter = ref<string | null>(null)
 
-const displayedLessons = computed(() =>
-  weekFilter.value !== null ? LESSONS.filter(l => l.week === weekFilter.value) : LESSONS,
-)
+function setWeekFilter(n: number | null) {
+  weekFilter.value = n
+  sectionFilter.value = null
+}
+function setSectionFilter(s: string | null) {
+  sectionFilter.value = s
+  weekFilter.value = null
+}
+function clearFilters() {
+  weekFilter.value = null
+  sectionFilter.value = null
+}
+
+const allLessons = computed<(Lesson | CustomLesson)[]>(() => [
+  ...LESSONS,
+  ...academy.customLessons,
+])
+
+// Groups custom lessons by their section field, sorted by day within each group
+const customSections = computed(() => {
+  const map = new Map<string, CustomLesson[]>()
+  for (const lesson of academy.customLessons) {
+    const key = lesson.section?.trim() || 'Unsectioned'
+    if (!map.has(key)) map.set(key, [])
+    map.get(key)!.push(lesson)
+  }
+  return Array.from(map.entries())
+    .map(([name, lessons]) => ({ name, lessons: lessons.sort((a, b) => a.day - b.day) }))
+})
+
+const displayedLessons = computed(() => {
+  if (weekFilter.value !== null) return allLessons.value.filter(l => l.week === weekFilter.value)
+  if (sectionFilter.value !== null) {
+    return academy.customLessons.filter(l => (l.section?.trim() || 'Unsectioned') === sectionFilter.value)
+  }
+  return allLessons.value
+})
 
 const nextStudyLesson = computed(() =>
-  LESSONS.find(lesson => !isIntroLesson(lesson) && isLessonUnlocked(lesson) && !academy.isCompleted(lesson.id))
-  ?? LESSONS.find(lesson => isLessonUnlocked(lesson) && !academy.isCompleted(lesson.id))
+  allLessons.value.find(lesson => !isIntroLesson(lesson) && isLessonUnlocked(lesson) && !academy.isCompleted(lesson.id))
+  ?? allLessons.value.find(lesson => isLessonUnlocked(lesson) && !academy.isCompleted(lesson.id))
   ?? null,
 )
 
 const resumeLesson = computed(() => {
-  const last = academy.lastVisitedLessonId ? getLesson(academy.lastVisitedLessonId) : null
+  const lastId = academy.lastVisitedLessonId
+  const last = lastId ? (allLessons.value.find(l => l.id === lastId) ?? null) : null
   if (last && isLessonUnlocked(last) && !academy.isCompleted(last.id)) return last
   return nextStudyLesson.value
 })
 
-const activeMilestones = computed(() => WEEKS.map(week => {
-  const lessons = LESSONS.filter(lesson => lesson.week === week.number)
-  const completed = lessons.filter(lesson => academy.isCompleted(lesson.id)).length
-  return {
-    ...week,
-    total: lessons.length,
-    completed,
-    percent: lessons.length ? Math.round((completed / lessons.length) * 100) : 0,
-  }
-}))
+const activeMilestones = computed(() => {
+  const builtIn = WEEKS
+    .filter(week => LESSONS.some(l => l.week === week.number))
+    .map(week => {
+      const lessons = LESSONS.filter(l => l.week === week.number)
+      const completed = lessons.filter(l => academy.isCompleted(l.id)).length
+      return { ...week, total: lessons.length, completed, percent: Math.round((completed / lessons.length) * 100) }
+    })
+  const custom = customSections.value.map(({ name, lessons }) => {
+    const completed = lessons.filter(l => academy.isCompleted(l.id)).length
+    const c = getSectionColor(name)
+    return {
+      number: -1,
+      title: name,
+      theme: '',
+      color: c.color,
+      bg: c.bg,
+      border: c.border,
+      total: lessons.length,
+      completed,
+      percent: lessons.length ? Math.round((completed / lessons.length) * 100) : 0,
+      sectionName: name,
+    }
+  })
+  return [...builtIn, ...custom]
+})
 
-function weekForLesson(lesson: Lesson): Week {
+function weekForLesson(lesson: Lesson | CustomLesson): Week {
+  if ('section' in lesson && lesson.week === 99) {
+    const c = getSectionColor(lesson.section || 'Unsectioned')
+    return { number: 99, title: lesson.section || 'Unsectioned', theme: lesson.section || 'Unsectioned', color: c.color, bg: c.bg, border: c.border }
+  }
   return getWeekMeta(lesson.week)
 }
 
-/** Returns "Intro 1–4" for orientation lessons, "Lesson 1–30" for main course. */
-function lessonLabel(lesson: Lesson): string {
+function lessonLabel(lesson: Lesson | CustomLesson): string {
   return lesson.week === 0 ? `Intro ${lesson.day}` : `Lesson ${lesson.day}`
 }
 
-function isIntroLesson(lesson: Lesson): boolean {
+function isIntroLesson(lesson: Lesson | CustomLesson): boolean {
   return lesson.week === 0
 }
 
-function lessonIndex(lesson: Lesson) {
+function lessonIndex(lesson: Lesson | CustomLesson) {
   return LESSONS.findIndex(item => item.id === lesson.id)
 }
 
-function isLessonUnlocked(lesson: Lesson) {
+function isLessonUnlocked(lesson: Lesson | CustomLesson) {
+  if ('section' in lesson) {
+    // Custom lessons: sequential within their section by day
+    const sectionLessons = academy.customLessons
+      .filter(l => (l.section?.trim() || 'Unsectioned') === (lesson.section?.trim() || 'Unsectioned'))
+      .sort((a, b) => a.day - b.day)
+    const idx = sectionLessons.findIndex(l => l.id === lesson.id)
+    if (idx <= 0) return true
+    return academy.isCompleted(sectionLessons[idx - 1].id)
+  }
+  // Built-in lessons: sequential by LESSONS array
   const index = lessonIndex(lesson)
   if (index <= 0) return true
   const previous = LESSONS[index - 1]
   return previous ? academy.isCompleted(previous.id) : false
 }
 
-function lessonCardTheme(lesson: Lesson): Record<string, string> {
+function lessonCardTheme(lesson: Lesson | CustomLesson): Record<string, string> {
   const palettes: Record<number, { accent: string; glow: string; wash: string; shine: string }> = {
-    0: { accent: '45, 212, 191',  glow: '20, 184, 166',  wash: '13, 148, 136',  shine: '153, 246, 228' },
-    1: { accent: '129, 140, 248', glow: '99, 102, 241',  wash: '79, 70, 229',   shine: '199, 210, 254' },
-    2: { accent: '196, 181, 253', glow: '139, 92, 246',  wash: '124, 58, 237',  shine: '221, 214, 254' },
-    3: { accent: '251, 113, 133', glow: '244, 63, 94',   wash: '225, 29, 72',   shine: '254, 205, 211' },
-    4: { accent: '52, 211, 153',  glow: '16, 185, 129',  wash: '5, 150, 105',   shine: '167, 243, 208' },
-    5: { accent: '251, 191, 36',  glow: '245, 158, 11',  wash: '217, 119, 6',   shine: '253, 230, 138' },
-    6: { accent: '34, 211, 238',  glow: '6, 182, 212',   wash: '8, 145, 178',    shine: '165, 243, 252' },
-    7: { accent: '125, 211, 252', glow: '14, 165, 233',  wash: '2, 132, 199',    shine: '186, 230, 253' },
+    0:  { accent: '45, 212, 191',  glow: '20, 184, 166',  wash: '13, 148, 136',  shine: '153, 246, 228' },
+    1:  { accent: '129, 140, 248', glow: '99, 102, 241',  wash: '79, 70, 229',   shine: '199, 210, 254' },
+    2:  { accent: '196, 181, 253', glow: '139, 92, 246',  wash: '124, 58, 237',  shine: '221, 214, 254' },
+    3:  { accent: '251, 113, 133', glow: '244, 63, 94',   wash: '225, 29, 72',   shine: '254, 205, 211' },
+    4:  { accent: '52, 211, 153',  glow: '16, 185, 129',  wash: '5, 150, 105',   shine: '167, 243, 208' },
+    5:  { accent: '251, 191, 36',  glow: '245, 158, 11',  wash: '217, 119, 6',   shine: '253, 230, 138' },
+    6:  { accent: '34, 211, 238',  glow: '6, 182, 212',   wash: '8, 145, 178',   shine: '165, 243, 252' },
+    7:  { accent: '125, 211, 252', glow: '14, 165, 233',  wash: '2, 132, 199',   shine: '186, 230, 253' },
+    99: { accent: '232, 121, 249', glow: '217, 70, 239',  wash: '192, 38, 211',  shine: '245, 208, 254' },
   }
   const palette = palettes[lesson.week] ?? palettes[1]!
   return {
@@ -368,7 +454,15 @@ function lessonCardTheme(lesson: Lesson): Record<string, string> {
   }
 }
 
-function openLesson(lesson: Lesson) {
+const professorExtraContext = computed(() => {
+  const l = currentLesson.value
+  if (l && 'agentNotes' in l && l.agentNotes?.trim()) {
+    return `[LESSON CONTEXT FROM COURSE AUTHOR]\n${l.agentNotes.trim()}\n[END CONTEXT]`
+  }
+  return ''
+})
+
+function openLesson(lesson: Lesson | CustomLesson) {
   lessonActionMenuId.value = null
   if (!isLessonUnlocked(lesson)) return
   resetWhiteboardForLesson()
@@ -378,7 +472,7 @@ function openLesson(lesson: Lesson) {
   void academy.setLastVisited('week-' + lesson.week, lesson.id)
 }
 
-async function completeLessonAndCelebrate(lesson: Lesson, allowReplay = false) {
+async function completeLessonAndCelebrate(lesson: Lesson | CustomLesson, allowReplay = false) {
   const wasComplete = academy.allCompleted && !!academy.certificateIssuedAt
   await academy.grantLessonCompletion(lesson.id)
   await nextTick()
@@ -387,7 +481,7 @@ async function completeLessonAndCelebrate(lesson: Lesson, allowReplay = false) {
   }
 }
 
-function handleLessonCardClick(e: MouseEvent, lesson: Lesson) {
+function handleLessonCardClick(e: MouseEvent, lesson: Lesson | CustomLesson) {
   if (import.meta.env.DEV && e.ctrlKey && e.shiftKey) {
     void completeLessonAndCelebrate(lesson, true)
     return
@@ -560,17 +654,17 @@ onUnmounted(() => {
   if (windowResizeTimer) clearTimeout(windowResizeTimer)
 })
 
-const nextLesson = computed<Lesson | null>(() => {
+const nextLesson = computed<Lesson | CustomLesson | null>(() => {
   if (!currentLesson.value) return null
-  const idx = LESSONS.findIndex(l => l.id === currentLesson.value!.id)
-  const next = (idx < LESSONS.length - 1 ? LESSONS[idx + 1] : null) ?? null
+  const idx = allLessons.value.findIndex(l => l.id === currentLesson.value!.id)
+  const next = (idx < allLessons.value.length - 1 ? allLessons.value[idx + 1] : null) ?? null
   return next && isLessonUnlocked(next) ? next : null
 })
 
-const prevLesson = computed<Lesson | null>(() => {
+const prevLesson = computed<Lesson | CustomLesson | null>(() => {
   if (!currentLesson.value) return null
-  const idx = LESSONS.findIndex(l => l.id === currentLesson.value!.id)
-  return (idx > 0 ? LESSONS[idx - 1] : null) ?? null
+  const idx = allLessons.value.findIndex(l => l.id === currentLesson.value!.id)
+  return (idx > 0 ? allLessons.value[idx - 1] : null) ?? null
 })
 
 async function markComplete() {
@@ -985,7 +1079,7 @@ async function resetAcademy() {
                 </button>
                 <button
                   class="inline-flex items-center gap-2 rounded-xl border border-[var(--border)] bg-white/[0.04] px-4 py-2.5 text-sm text-[var(--text-muted)] transition-colors hover:bg-white/[0.07] hover:text-[var(--text)]"
-                  @click="weekFilter = null"
+                  @click="clearFilters"
                 >
                   View Full Path
                 </button>
@@ -1024,10 +1118,10 @@ async function resetAcademy() {
           <div class="mt-6 grid gap-2 md:grid-cols-4 xl:grid-cols-8">
             <button
               v-for="milestone in activeMilestones"
-              :key="milestone.number"
+              :key="'sectionName' in milestone ? milestone.sectionName : milestone.number"
               class="rounded-xl border p-3 text-left transition-all hover:-translate-y-0.5"
-              :class="weekFilter === milestone.number ? [milestone.border, milestone.bg] : 'border-white/10 bg-white/[0.03] hover:border-white/20'"
-              @click="weekFilter = weekFilter === milestone.number ? null : milestone.number"
+              :class="('sectionName' in milestone ? sectionFilter === milestone.sectionName : weekFilter === milestone.number) ? [milestone.border, milestone.bg] : 'border-white/10 bg-white/[0.03] hover:border-white/20'"
+              @click="'sectionName' in milestone ? setSectionFilter(sectionFilter === milestone.sectionName ? null : milestone.sectionName) : setWeekFilter(weekFilter === milestone.number ? null : milestone.number)"
             >
               <p class="truncate text-[10px] font-bold uppercase tracking-widest" :class="milestone.color">{{ milestone.title }}</p>
               <p class="mt-1 truncate text-[11px] text-[var(--text-muted)]">{{ milestone.theme }}</p>
@@ -1038,30 +1132,42 @@ async function resetAcademy() {
           </div>
         </section>
 
-        <!-- Week filter tabs -->
+        <!-- Filter tabs -->
         <div class="flex items-center gap-1.5 overflow-x-auto">
           <button
             class="shrink-0 rounded-lg border px-3 py-1 text-[11px] font-medium transition-colors"
-            :class="weekFilter === null ? 'border-indigo-500/30 bg-indigo-500/10 text-indigo-300' : 'border-[var(--border)] text-[var(--text-faint)] hover:text-[var(--text-muted)]'"
-            @click="weekFilter = null"
+            :class="weekFilter === null && sectionFilter === null ? 'border-indigo-500/30 bg-indigo-500/10 text-indigo-300' : 'border-[var(--border)] text-[var(--text-faint)] hover:text-[var(--text-muted)]'"
+            @click="clearFilters"
           >
             All Lessons
           </button>
           <button
-            v-for="week in WEEKS"
+            v-for="week in WEEKS.filter(w => LESSONS.some(l => l.week === w.number))"
             :key="week.number"
             class="shrink-0 rounded-lg border px-3 py-1 text-[11px] font-medium transition-colors"
             :class="weekFilter === week.number ? [week.border, week.bg, week.color] : 'border-[var(--border)] text-[var(--text-faint)] hover:text-[var(--text-muted)]'"
-            @click="weekFilter = week.number === weekFilter ? null : week.number"
+            @click="setWeekFilter(week.number === weekFilter ? null : week.number)"
           >
             {{ week.title }} — {{ week.theme }}
+          </button>
+          <button
+            v-for="sec in customSections"
+            :key="'sec:' + sec.name"
+            class="shrink-0 rounded-lg border px-3 py-1 text-[11px] font-medium transition-colors"
+            :class="sectionFilter === sec.name
+              ? [getSectionColor(sec.name).border, getSectionColor(sec.name).bg, getSectionColor(sec.name).color]
+              : 'border-[var(--border)] text-[var(--text-faint)] hover:text-[var(--text-muted)]'"
+            @click="setSectionFilter(sectionFilter === sec.name ? null : sec.name)"
+          >
+            {{ sec.name }}
           </button>
         </div>
 
         <!-- Weeks + Lessons -->
         <div class="space-y-6">
+          <!-- Built-in weeks (only shown when they contain lessons) -->
           <template v-for="week in WEEKS" :key="week.number">
-            <div v-if="weekFilter === null || weekFilter === week.number" class="space-y-3">
+            <div v-if="sectionFilter === null && (weekFilter === null || weekFilter === week.number) && LESSONS.some(l => l.week === week.number)" class="space-y-3">
               <!-- Week header -->
               <div class="flex items-center gap-2.5">
                 <div class="h-px flex-1 bg-[var(--border)]" />
@@ -1177,6 +1283,95 @@ async function resetAcademy() {
                     >
                       <RotateCcw class="size-3.5 text-amber-300" />
                       <span>Clear audio</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </template>
+
+          <!-- Custom sections from .va files -->
+          <template v-for="sec in customSections" :key="'sec:' + sec.name">
+            <div v-if="weekFilter === null && (sectionFilter === null || sectionFilter === sec.name)" class="space-y-3">
+              <div class="flex items-center gap-2.5">
+                <div class="h-px flex-1 bg-[var(--border)]" />
+                <div class="flex items-center gap-2 rounded-full border px-3 py-1" :class="[getSectionColor(sec.name).border, getSectionColor(sec.name).bg]">
+                  <span class="text-[10px] font-bold uppercase tracking-widest" :class="getSectionColor(sec.name).color">{{ sec.name }}</span>
+                </div>
+                <div class="h-px flex-1 bg-[var(--border)]" />
+              </div>
+              <div class="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                <div
+                  v-for="lesson in sec.lessons"
+                  :key="lesson.id"
+                  class="academy-lesson-card group relative flex flex-col gap-2 overflow-hidden rounded-xl border p-3.5 text-left transition-all"
+                  :class="[
+                    !isLessonUnlocked(lesson)
+                      ? 'is-locked cursor-not-allowed opacity-55'
+                      : academy.isCompleted(lesson.id)
+                      ? 'is-complete cursor-pointer'
+                      : lesson.id === academy.lastVisitedLessonId && !academy.isCompleted(lesson.id)
+                      ? 'is-active cursor-pointer'
+                      : 'cursor-pointer',
+                  ]"
+                  :style="lessonCardTheme(lesson)"
+                  @click="handleLessonCardClick($event, lesson)"
+                >
+                  <div class="flex items-start justify-between gap-2">
+                    <span class="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest" :class="getSectionColor(lesson.section).color">
+                      {{ lessonLabel(lesson) }}
+                    </span>
+                    <Lock v-if="!isLessonUnlocked(lesson)" class="size-3 shrink-0 text-[var(--text-faint)]" />
+                    <CheckCircle2 v-else-if="academy.isCompleted(lesson.id)" class="size-3 shrink-0 text-emerald-400" />
+                  </div>
+                  <div>
+                    <p class="text-[11px] font-semibold leading-tight text-[var(--text)]">{{ lesson.title }}</p>
+                    <div class="mt-1 flex items-center gap-1.5 text-[10px] text-[var(--text-faint)]">
+                      <Clock class="size-2.5" />
+                      <span>{{ lesson.duration }}</span>
+                    </div>
+                  </div>
+                  <div class="relative mt-auto flex min-h-4 items-center pr-8">
+                    <span v-if="tts.cachedLessonIds.value.has(lesson.id)" class="flex items-center gap-1 text-[9px] text-amber-400/80">
+                      <Volume2 class="size-2.5" /> Custom audio
+                    </span>
+                    <span v-else-if="lesson.embeddedAudio" class="flex items-center gap-1 text-[9px] text-teal-400/80">
+                      <Volume2 class="size-2.5" /> Built-in audio
+                    </span>
+                    <span v-else-if="tts.generatingLessonIds.value.has(lesson.id)" class="flex items-center gap-1 text-[9px] text-teal-400/70">
+                      <Loader2 class="size-2.5 animate-spin" />
+                      {{ tts.progressByLessonId.value[lesson.id] || 'Creating...' }}
+                    </span>
+                  </div>
+
+                  <button
+                    class="absolute bottom-2 right-2 grid size-6 place-items-center rounded-md text-[var(--text-faint)] transition-colors hover:bg-white/[0.07] hover:text-[var(--text)]"
+                    title="Lesson actions"
+                    @click.stop="toggleLessonActions(lesson)"
+                  >
+                    <MoreHorizontal class="size-3.5" />
+                  </button>
+
+                  <div
+                    v-if="lessonActionMenuId === lesson.id"
+                    class="lesson-action-menu absolute bottom-9 right-2 z-20 w-44 overflow-hidden rounded-lg border border-[var(--border)] bg-[#111114]/95 py-1 shadow-2xl shadow-black/40 backdrop-blur-md"
+                    @click.stop
+                  >
+                    <button
+                      class="flex w-full items-center gap-2 px-2.5 py-2 text-left text-[11px] text-[var(--text-muted)] transition-colors hover:bg-white/[0.06] hover:text-[var(--text)] disabled:cursor-not-allowed disabled:opacity-50"
+                      :disabled="tts.generatingLessonIds.value.has(lesson.id)"
+                      @click="openCreateTTSModal(lesson)"
+                    >
+                      <Mic class="size-3.5 text-teal-300" />
+                      <span>{{ tts.cachedLessonIds.value.has(lesson.id) ? 'Regenerate audio' : 'Generate audio' }}</span>
+                    </button>
+                    <button
+                      v-if="tts.cachedLessonIds.value.has(lesson.id)"
+                      class="flex w-full items-center gap-2 px-2.5 py-2 text-left text-[11px] text-[var(--text-muted)] transition-colors hover:bg-white/[0.06] hover:text-[var(--text)]"
+                      @click="clearLessonAudio(lesson)"
+                    >
+                      <RotateCcw class="size-3.5 text-amber-300" />
+                      <span>{{ lesson.embeddedAudio ? 'Revert to built-in' : 'Clear audio' }}</span>
                     </button>
                   </div>
                 </div>
@@ -1438,6 +1633,7 @@ async function resetAcademy() {
               :lesson="currentLesson"
               :lesson-completed="academy.isCompleted(currentLesson.id)"
               :terminal-visible="labTerminalVisible"
+              :extra-context="professorExtraContext"
               @mark-complete="markComplete"
               @mermaid-diagram="onMermaidDiagram"
               @whiteboard-diagrams="syncWhiteboardDiagrams"
@@ -1643,13 +1839,16 @@ async function resetAcademy() {
               v-for="opt in ttsModelOptions"
               :key="opt.id"
               class="flex-1 rounded-lg border px-2.5 py-2 text-xs transition-all"
-              :class="bulkTTSModel === opt.id
-                ? 'border-teal-500/30 bg-teal-500/10 text-teal-200'
-                : 'border-[var(--border)] text-[var(--text-faint)] hover:border-teal-500/20 hover:text-[var(--text-muted)]'"
-              :disabled="bulkRunning"
-              @click="bulkTTSModel = opt.id"
+              :class="opt.disabled
+                ? 'cursor-not-allowed border-[var(--border)] text-[var(--text-faint)] opacity-50'
+                : bulkTTSModel === opt.id
+                  ? 'border-teal-500/30 bg-teal-500/10 text-teal-200'
+                  : 'border-[var(--border)] text-[var(--text-faint)] hover:border-teal-500/20 hover:text-[var(--text-muted)]'"
+              :disabled="bulkRunning || opt.disabled"
+              @click="!opt.disabled && (bulkTTSModel = opt.id)"
             >
               {{ opt.label }}
+              <span v-if="opt.soon" class="ml-1 rounded-full border border-rose-500/25 bg-rose-500/10 px-1 py-0.5 text-[8px] font-semibold text-rose-300">Soon</span>
             </button>
           </div>
         </div>
@@ -1670,7 +1869,7 @@ async function resetAcademy() {
             <button
               class="text-[10px] text-teal-400 transition-colors hover:text-teal-300"
               :disabled="bulkRunning"
-              @click="bulkQueue = LESSONS.filter(l => !tts.cachedLessonIds.value.has(l.id) && !tts.generatingLessonIds.value.has(l.id)).map(l => l.id)"
+              @click="bulkQueue = allLessons.filter(l => !tts.cachedLessonIds.value.has(l.id) && !tts.generatingLessonIds.value.has(l.id)).map(l => l.id)"
             >
               Select all uncached
             </button>
@@ -1679,13 +1878,13 @@ async function resetAcademy() {
 
         <!-- Scrollable lesson list grouped by week -->
         <div class="max-h-64 space-y-3 overflow-y-auto custom-scroll">
-          <template v-for="week in WEEKS" :key="week.number">
+          <template v-for="week in displayedWeeks" :key="week.number">
             <div class="space-y-0.5">
               <p class="mb-1 text-[10px] font-bold uppercase tracking-widest" :class="week.color">
                 {{ week.title }} — {{ week.theme }}
               </p>
               <button
-                v-for="lesson in LESSONS.filter(l => l.week === week.number)"
+                v-for="lesson in allLessons.filter(l => l.week === week.number)"
                 :key="lesson.id"
                 class="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-white/[0.04] disabled:cursor-not-allowed disabled:opacity-60"
                 :disabled="bulkRunning || tts.generatingLessonIds.value.has(lesson.id)"
@@ -1799,12 +1998,18 @@ async function resetAcademy() {
               v-for="opt in ttsModelOptions"
               :key="opt.id"
               class="rounded-xl border p-3 text-left transition-all"
-              :class="ttsModalModel === opt.id
-                ? 'border-teal-500/30 bg-teal-500/10'
-                : 'border-[var(--border)] hover:border-teal-500/20 hover:bg-white/[0.02]'"
-              @click="ttsModalModel = opt.id"
+              :class="opt.disabled
+                ? 'cursor-not-allowed border-[var(--border)] opacity-50'
+                : ttsModalModel === opt.id
+                  ? 'border-teal-500/30 bg-teal-500/10'
+                  : 'border-[var(--border)] hover:border-teal-500/20 hover:bg-white/[0.02]'"
+              :disabled="opt.disabled"
+              @click="!opt.disabled && (ttsModalModel = opt.id)"
             >
-              <p class="text-xs font-semibold text-[var(--text)]">{{ opt.label }}</p>
+              <div class="flex items-center gap-1.5">
+                <p class="text-xs font-semibold text-[var(--text)]">{{ opt.label }}</p>
+                <span v-if="opt.soon" class="rounded-full border border-rose-500/25 bg-rose-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-rose-300">Soon</span>
+              </div>
               <p class="mt-0.5 text-[10px] text-[var(--text-faint)]">{{ opt.description }}</p>
             </button>
           </div>
